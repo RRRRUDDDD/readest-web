@@ -611,9 +611,15 @@ const FoliateViewer: React.FC<{
       const footerBarHeight = 52 + safeBottomPadding;
       const scrollTop = headerVisible ? gridInsets.top + 44 : 0;
       const scrollBottom = footerVisible ? Math.max(footerBarHeight, ttsBarHeight) : ttsBarHeight;
-      setScrollMargins({ top: scrollTop, bottom: scrollBottom });
+      setScrollMargins((prev) =>
+        prev.top === scrollTop && prev.bottom === scrollBottom
+          ? prev
+          : { top: scrollTop, bottom: scrollBottom },
+      );
     } else {
-      setScrollMargins({ top: 0, bottom: 0 });
+      setScrollMargins((prev) =>
+        prev.top === 0 && prev.bottom === 0 ? prev : { top: 0, bottom: 0 },
+      );
     }
     viewRef.current?.renderer.setAttribute('gap', `${viewSettings.gapPercent}%`);
     if (viewSettings.scrolled) {

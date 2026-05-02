@@ -1,4 +1,4 @@
-const DEFAULT_STORAGE_QUOTA = 500 * 1024 * 1024;
+const DEFAULT_STORAGE_QUOTA = 10 * 1024 * 1024 * 1024;
 const STORAGE_QUOTA_GRACE_BYTES = 10 * 1024 * 1024;
 
 export const corsHeaders = {
@@ -193,15 +193,24 @@ async function hmacHex(secret, value) {
   return [...new Uint8Array(signature)].map((byte) => byte.toString(16).padStart(2, '0')).join('');
 }
 
-export async function createObjectUrl(request, env, method, fileKey, expiresIn = 1800) {
+export async function createObjectUrl(
+  request,
+  env,
+  method,
+  fileKey,
+  expiresIn = 1800,
+  size = null,
+) {
   const secret = env.STORAGE_SIGNING_SECRET;
   if (!secret) throw new Error('STORAGE_SIGNING_SECRET is not configured');
 
   const expires = Math.floor(Date.now() / 1000) + expiresIn;
-  const signature = await hmacHex(secret, `${method}\n${fileKey}\n${expires}`);
+  const sizePart = size === null || size === undefined ? '' : String(size);
+  const signature = await hmacHex(secret, `${method}\n${fileKey}\n${expires}\n${sizePart}`);
   const url = new URL('/api/storage/object', request.url);
   url.searchParams.set('fileKey', fileKey);
   url.searchParams.set('expires', expires.toString());
+  if (sizePart) url.searchParams.set('size', sizePart);
   url.searchParams.set('signature', signature);
   return url.toString();
 }
@@ -213,11 +222,16 @@ export async function verifyObjectSignature(request, env) {
   const url = new URL(request.url);
   const fileKey = url.searchParams.get('fileKey') || '';
   const expires = Number(url.searchParams.get('expires') || 0);
+  const size = url.searchParams.get('size') || '';
   const signature = url.searchParams.get('signature') || '';
   if (!fileKey || !expires || !signature) return { error: 'Invalid signed URL' };
   if (Date.now() / 1000 > expires) return { error: 'Signed URL expired' };
 
-  const expected = await hmacHex(secret, `${request.method}\n${fileKey}\n${expires}`);
-  if (expected !== signature) return { error: 'Invalid signed URL' };
-  return { fileKey };
+  const expected = await hmacHex(secret, `${request.method}\n${fileKey}\n${expires}\n${size}`);
+  const legacyExpected = size
+    ? null
+    : await hmacHex(secret, `${request.method}\n${fileKey}\n${expires}`);
+  if (expected !== signature && legacyExpected !== signature)
+    return { error: 'Invalid signed URL' };
+  return { fileKey, size: size ? Number(size) : null };
 }

@@ -56,7 +56,9 @@ const ReadingRuler: React.FC<ReadingRulerProps> = ({
   const dragPointerOffsetRef = useRef(0);
   const lastPageRef = useRef<number | null>(null);
   const animationTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const dragFrameRef = useRef<number | null>(null);
   const currentPositionRef = useRef(position);
+  const pendingPositionRef = useRef(position);
 
   const rulerSize = calculateReadingRulerSize(lines, viewSettings, bookFormat);
   const baseColor = READING_RULER_COLORS[color] || READING_RULER_COLORS['yellow'];
@@ -80,10 +82,15 @@ const ReadingRuler: React.FC<ReadingRulerProps> = ({
         clearTimeout(animationTimeoutRef.current);
         animationTimeoutRef.current = null;
       }
+      if (dragFrameRef.current !== null) {
+        window.cancelAnimationFrame(dragFrameRef.current);
+        dragFrameRef.current = null;
+      }
 
       setShouldAnimate(animate);
       setCurrentPosition(nextPosition);
       currentPositionRef.current = nextPosition;
+      pendingPositionRef.current = nextPosition;
       throttledSave(nextPosition);
 
       if (animate) {
@@ -95,6 +102,24 @@ const ReadingRuler: React.FC<ReadingRulerProps> = ({
     },
     [throttledSave],
   );
+
+  const scheduleDragPosition = useCallback((nextPosition: number) => {
+    currentPositionRef.current = nextPosition;
+    pendingPositionRef.current = nextPosition;
+    if (dragFrameRef.current !== null) return;
+    dragFrameRef.current = window.requestAnimationFrame(() => {
+      dragFrameRef.current = null;
+      setCurrentPosition(pendingPositionRef.current);
+    });
+  }, []);
+
+  const flushDragPosition = useCallback(() => {
+    if (dragFrameRef.current !== null) {
+      window.cancelAnimationFrame(dragFrameRef.current);
+      dragFrameRef.current = null;
+    }
+    setCurrentPosition(currentPositionRef.current);
+  }, []);
 
   // Track container size for overlay calculations
   useEffect(() => {
@@ -121,6 +146,19 @@ const ReadingRuler: React.FC<ReadingRulerProps> = ({
   useEffect(() => {
     const timer = setTimeout(() => setIsVisible(true), 30);
     return () => clearTimeout(timer);
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      if (dragFrameRef.current !== null) {
+        window.cancelAnimationFrame(dragFrameRef.current);
+        dragFrameRef.current = null;
+      }
+      if (animationTimeoutRef.current) {
+        clearTimeout(animationTimeoutRef.current);
+        animationTimeoutRef.current = null;
+      }
+    };
   }, []);
 
   // Auto-move ruler to first visible text on page change
@@ -280,10 +318,9 @@ const ReadingRuler: React.FC<ReadingRulerProps> = ({
         const relativeY = e.clientY - rect.top - dragPointerOffsetRef.current;
         newPosition = clampPosition((relativeY / rect.height) * 100, rect.height);
       }
-      setCurrentPosition(newPosition);
-      currentPositionRef.current = newPosition;
+      scheduleDragPosition(newPosition);
     },
-    [isVertical, clampPosition],
+    [isVertical, clampPosition, scheduleDragPosition],
   );
 
   const handlePointerUp = useCallback(
@@ -291,10 +328,11 @@ const ReadingRuler: React.FC<ReadingRulerProps> = ({
       if (!isDragging.current) return;
       isDragging.current = false;
       dragPointerOffsetRef.current = 0;
+      flushDragPosition();
       e.currentTarget.releasePointerCapture(e.pointerId);
       throttledSave(currentPositionRef.current);
     },
-    [throttledSave],
+    [flushDragPosition, throttledSave],
   );
 
   useEffect(() => {
@@ -361,8 +399,7 @@ const ReadingRuler: React.FC<ReadingRulerProps> = ({
         const dim = isVertical ? rect.width : rect.height;
         const rel = isVertical ? vx - rect.left : vy - rect.top;
         const newPos = clampPosition((rel / dim) * 100, dim);
-        setCurrentPosition(newPos);
-        currentPositionRef.current = newPos;
+        scheduleDragPosition(newPos);
         return true;
       }
 
@@ -370,6 +407,7 @@ const ReadingRuler: React.FC<ReadingRulerProps> = ({
         const wasConsumed = isTouchDraggingRef.current;
         if (wasConsumed) {
           isDragging.current = false;
+          flushDragPosition();
           throttledSave(currentPositionRef.current);
         }
         touchInRulerRef.current = false;

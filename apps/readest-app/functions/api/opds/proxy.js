@@ -5,6 +5,20 @@ const corsHeaders = {
   'Access-Control-Allow-Methods': 'GET, HEAD, OPTIONS',
   'Access-Control-Allow-Headers': 'Content-Type',
 };
+const BLOCKED_REQUEST_HEADERS = new Set([
+  'authorization',
+  'connection',
+  'content-length',
+  'cookie',
+  'host',
+  'proxy-authorization',
+  'te',
+  'transfer-encoding',
+  'upgrade',
+]);
+const HEADER_NAME_RE = /^[!#$%&'*+\-.^_`|~0-9A-Za-z]+$/;
+const MAX_HEADER_VALUE_LENGTH = 2048;
+const MAX_BUFFER_BYTES = 50 * 1024 * 1024;
 
 function json(data, init = {}) {
   return new Response(JSON.stringify(data), {
@@ -45,6 +59,72 @@ function getUrlParameter(request) {
   return decodeURIComponent(fullUrl.substring(valueStart, valueEnd));
 }
 
+function isLanAddress(url) {
+  try {
+    const urlObj = new URL(url);
+    const hostname = urlObj.hostname;
+
+    if (hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '0.0.0.0') {
+      return true;
+    }
+
+    const ipv4 = hostname.match(/^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/);
+    if (ipv4) {
+      const [, a, b, c, d] = ipv4.map(Number);
+      if ([a, b, c, d].some((part) => part === undefined || part > 255)) return false;
+      if (a === 10) return true;
+      if (a === 172 && b >= 16 && b <= 31) return true;
+      if (a === 192 && b === 168) return true;
+      if (a === 169 && b === 254) return true;
+      if (a === 100 && b >= 64 && b <= 127) return true;
+    }
+
+    const ipv6 = hostname.startsWith('[') ? hostname.slice(1, -1) : hostname;
+    return (
+      ipv6.includes(':') &&
+      (ipv6 === '::1' ||
+        ipv6.startsWith('fe80:') ||
+        ipv6.startsWith('fc00:') ||
+        ipv6.startsWith('fd00:'))
+    );
+  } catch {
+    return false;
+  }
+}
+
+function validateProxyTarget(url) {
+  try {
+    const parsed = new URL(url);
+    if (!['http:', 'https:'].includes(parsed.protocol)) {
+      return 'Only HTTP and HTTPS OPDS URLs are supported';
+    }
+    if (parsed.username || parsed.password) {
+      return 'Credentials in OPDS URLs are not allowed; use catalog authentication settings';
+    }
+    if (isLanAddress(parsed.toString()) || parsed.hostname.endsWith('.local')) {
+      return 'Private network OPDS URLs cannot be fetched through the web proxy';
+    }
+    return null;
+  } catch {
+    return 'Invalid URL format';
+  }
+}
+
+function applyCustomHeaders(headers, customHeaders) {
+  for (const [key, value] of Object.entries(customHeaders)) {
+    const normalizedKey = key.toLowerCase();
+    if (
+      HEADER_NAME_RE.test(key) &&
+      !normalizedKey.startsWith('sec-') &&
+      !normalizedKey.startsWith('proxy-') &&
+      !BLOCKED_REQUEST_HEADERS.has(normalizedKey) &&
+      value.length <= MAX_HEADER_VALUE_LENGTH
+    ) {
+      headers.set(key, value);
+    }
+  }
+}
+
 async function handleRequest(request, method) {
   const requestUrl = new URL(request.url);
   const url = getUrlParameter(request);
@@ -61,10 +141,9 @@ async function handleRequest(request, method) {
     );
   }
 
-  try {
-    new URL(url);
-  } catch {
-    return json({ error: 'Invalid URL format' }, { status: 400 });
+  const validationError = validateProxyTarget(url);
+  if (validationError) {
+    return json({ error: validationError }, { status: 400 });
   }
 
   try {
@@ -75,9 +154,7 @@ async function handleRequest(request, method) {
       Accept: 'application/atom+xml, application/xml, text/xml, application/json, */*',
     });
 
-    for (const [key, value] of Object.entries(customHeaders)) {
-      headers.set(key, value);
-    }
+    applyCustomHeaders(headers, customHeaders);
     if (auth) {
       headers.set('Authorization', auth);
     }
@@ -134,7 +211,8 @@ async function handleRequest(request, method) {
       });
     }
 
-    if (stream === 'true' && contentLength && Number(contentLength) > 1024 * 1024) {
+    const contentLengthNumber = contentLength ? Number(contentLength) : 0;
+    if (stream === 'true' && contentLength && contentLengthNumber > 1024 * 1024) {
       return new Response(response.body, {
         status: 200,
         headers: buildResponseHeaders({
@@ -145,7 +223,20 @@ async function handleRequest(request, method) {
       });
     }
 
+    if (contentLengthNumber > MAX_BUFFER_BYTES) {
+      return json(
+        { error: 'Response is too large to buffer; retry as a streamed download' },
+        { status: 413 },
+      );
+    }
+
     const body = await response.arrayBuffer();
+    if (body.byteLength > MAX_BUFFER_BYTES) {
+      return json(
+        { error: 'Response is too large to buffer; retry as a streamed download' },
+        { status: 413 },
+      );
+    }
     return new Response(body, {
       status: 200,
       headers: buildResponseHeaders({

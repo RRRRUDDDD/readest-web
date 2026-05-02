@@ -131,7 +131,7 @@ describe('ReadingRuler', () => {
     });
   });
 
-  it('keeps the drag handle anchored instead of snapping the ruler center to the pointer', () => {
+  it('keeps the drag handle anchored instead of snapping the ruler center to the pointer', async () => {
     const { container } = render(
       <ReadingRuler
         bookKey='book-1'
@@ -155,7 +155,9 @@ describe('ReadingRuler', () => {
     fireEvent.pointerDown(topHandle, { pointerId: 1, clientY: 306 });
     fireEvent.pointerMove(topHandle, { pointerId: 1, clientY: 316 });
 
-    expect(ruler.style.top).toBe('34%');
+    await waitFor(() => {
+      expect(ruler.style.top).toBe('34%');
+    });
   });
 
   it('does not consume ruler movement when already at the boundary', () => {

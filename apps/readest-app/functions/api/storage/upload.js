@@ -1,5 +1,6 @@
 import {
   createObjectUrl,
+  canStoreFile,
   handleOptions,
   json,
   requireUser,
@@ -17,14 +18,15 @@ export async function onRequestPost({ request, env }) {
 
   try {
     const { fileName, fileSize, bookHash, temp = false } = await request.json();
-    if (!fileName || !fileSize) {
+    const numericFileSize = Number(fileSize);
+    if (!fileName || !Number.isFinite(numericFileSize) || numericFileSize <= 0) {
       return json({ error: 'Missing file info' }, { status: 400 });
     }
 
     if (temp) {
       const timeStr = new Date().toISOString().replace(/[-:]/g, '').replace('T', '').slice(0, 10);
       const fileKey = `temp/img/${timeStr}/${user.id.slice(0, 8)}/${fileName}`;
-      const uploadUrl = await createObjectUrl(request, env, 'PUT', fileKey, 1800);
+      const uploadUrl = await createObjectUrl(request, env, 'PUT', fileKey, 1800, numericFileSize);
       const downloadUrl = await createObjectUrl(request, env, 'GET', fileKey, 3 * 86400);
       return json({ uploadUrl, downloadUrl });
     }
@@ -36,7 +38,16 @@ export async function onRequestPost({ request, env }) {
       `files?select=*&user_id=eq.${user.id}&file_key=eq.${encodeURIComponent(fileKey)}&limit=1`,
     );
 
+    const objectSize = existing?.[0]?.file_size || numericFileSize;
     if (!existing?.length) {
+      const quota = canStoreFile(env, token, numericFileSize);
+      if (!quota.allowed) {
+        return json(
+          { error: 'Storage quota exceeded', usage: quota.usage, quota: quota.quota },
+          { status: 413 },
+        );
+      }
+
       await supabaseRest(env, token, 'files', {
         method: 'POST',
         headers: {
@@ -48,13 +59,13 @@ export async function onRequestPost({ request, env }) {
             user_id: user.id,
             book_hash: bookHash,
             file_key: fileKey,
-            file_size: Number(fileSize),
+            file_size: numericFileSize,
           },
         ]),
       });
     }
 
-    const uploadUrl = await createObjectUrl(request, env, 'PUT', fileKey, 1800);
+    const uploadUrl = await createObjectUrl(request, env, 'PUT', fileKey, 1800, objectSize);
     return json({
       uploadUrl,
       fileKey,

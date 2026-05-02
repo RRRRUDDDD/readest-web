@@ -964,10 +964,11 @@ describe('services/constants', () => {
       expect(typeof DEFAULT_STORAGE_QUOTA.purchase).toBe('number');
     });
 
-    it('DEFAULT_STORAGE_QUOTA tiers are in ascending order (except purchase)', () => {
-      expect(DEFAULT_STORAGE_QUOTA.free).toBeGreaterThan(0);
-      expect(DEFAULT_STORAGE_QUOTA.plus).toBeGreaterThan(DEFAULT_STORAGE_QUOTA.free);
-      expect(DEFAULT_STORAGE_QUOTA.pro).toBeGreaterThan(DEFAULT_STORAGE_QUOTA.plus);
+    it('DEFAULT_STORAGE_QUOTA tiers use the shared 10GB storage cap', () => {
+      const tenGB = 10 * 1024 * 1024 * 1024;
+      expect(DEFAULT_STORAGE_QUOTA.free).toBe(tenGB);
+      expect(DEFAULT_STORAGE_QUOTA.plus).toBe(tenGB);
+      expect(DEFAULT_STORAGE_QUOTA.pro).toBe(tenGB);
     });
 
     it('DEFAULT_DAILY_TRANSLATION_QUOTA has all plan tiers', () => {

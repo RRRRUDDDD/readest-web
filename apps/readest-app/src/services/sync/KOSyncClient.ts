@@ -77,11 +77,16 @@ export class KOSyncClient {
       }
 
       const proxyUrl = `${getAPIBaseUrl()}/kosync`;
+      const proxyHeaders = {
+        accept: 'application/vnd.koreader.v1+json',
+        ...(method === 'GET' ? {} : { 'Content-Type': 'application/json' }),
+        ...Object.fromEntries(headers.entries()),
+      };
       const proxyBody: KoSyncProxyPayload = {
         serverUrl: this.config.serverUrl,
         endpoint,
         method,
-        headers: Object.fromEntries(headers.entries()),
+        headers: proxyHeaders,
         body: body ? JSON.parse(body as string) : undefined,
       };
 

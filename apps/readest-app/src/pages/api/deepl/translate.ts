@@ -6,8 +6,10 @@ import { getSubscriptionPlan, validateUserAndToken } from '@/utils/access';
 import { ErrorCodes } from '@/services/translators';
 import { UsageStatsManager } from '@/utils/usage';
 
-const DEFAULT_DEEPL_FREE_API = 'https://api-free.deepl.com/v2/translate';
-const DEFAULT_DEEPL_PRO_API = 'https://api.deepl.com/v2/translate';
+const DEFAULT_DEEPLX_API =
+  'https://api.deeplx.org/ZHCKh0pBfscro_f5LAdiDEkAb3Zf7wZJvRsXWcoU-pk/translate';
+const DEFAULT_DEEPL_FREE_API = DEFAULT_DEEPLX_API;
+const DEFAULT_DEEPL_PRO_API = DEFAULT_DEEPLX_API;
 
 interface KVNamespace {
   get(key: string): Promise<string | null>;
@@ -78,16 +80,18 @@ const handler = async (req: NextApiRequest, res: NextApiResponse) => {
   const hasKVCache = !!env['TRANSLATIONS_KV'];
 
   const { user, token } = await validateUserAndToken(req.headers['authorization']);
+  if (!user || !token) {
+    return res.status(401).json({ error: ErrorCodes.UNAUTHORIZED });
+  }
+
   const { DEEPL_PRO_API, DEEPL_FREE_API } = process.env;
   const deepFreeApiUrl = DEEPL_FREE_API || DEFAULT_DEEPL_FREE_API;
   const deeplProApiUrl = DEEPL_PRO_API || DEFAULT_DEEPL_PRO_API;
 
   let deeplApiUrl = deepFreeApiUrl;
   let userPlan = 'free';
-  if (user && token) {
-    userPlan = getSubscriptionPlan(token);
-    if (userPlan === 'pro') deeplApiUrl = deeplProApiUrl;
-  }
+  userPlan = getSubscriptionPlan(token);
+  if (userPlan === 'pro') deeplApiUrl = deeplProApiUrl;
   const deeplAuthKey =
     deeplApiUrl === deeplProApiUrl
       ? getDeepLAPIKey(process.env['DEEPL_PRO_API_KEYS'])
@@ -99,6 +103,10 @@ const handler = async (req: NextApiRequest, res: NextApiResponse) => {
     target_lang: targetLang = 'EN',
     use_cache: useCache = false,
   }: { text: string[]; source_lang: string; target_lang: string; use_cache: boolean } = req.body;
+
+  if (!Array.isArray(text)) {
+    return res.status(400).json({ error: 'Invalid text payload' });
+  }
 
   try {
     const translations = await Promise.all(
@@ -122,8 +130,6 @@ const handler = async (req: NextApiRequest, res: NextApiResponse) => {
             console.error('Cache retrieval error:', cacheError);
           }
         }
-
-        if (!user || !token) return res.status(401).json({ error: ErrorCodes.UNAUTHORIZED });
 
         return await callDeepLAPI(
           singleText,
@@ -184,13 +190,17 @@ async function callDeepLAPI(
     delete requestBody.source_lang;
   }
 
+  const headers: Record<string, string> = {
+    'x-fingerprint': process.env['DEEPL_X_FINGERPRINT'] || '',
+    'Content-Type': 'application/json',
+  };
+  if (authKey) {
+    headers['Authorization'] = `DeepL-Auth-Key ${authKey}`;
+  }
+
   const response = await fetch(apiUrl, {
     method: 'POST',
-    headers: {
-      Authorization: `DeepL-Auth-Key ${authKey}`,
-      'x-fingerprint': process.env['DEEPL_X_FINGERPRINT'] || '',
-      'Content-Type': 'application/json',
-    },
+    headers,
     body: JSON.stringify(requestBody),
   });
 

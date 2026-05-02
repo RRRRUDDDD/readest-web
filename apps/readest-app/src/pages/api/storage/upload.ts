@@ -1,7 +1,11 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
 import { createSupabaseAdminClient } from '@/utils/supabase';
 import { corsAllMethods, runMiddleware } from '@/utils/cors';
-import { validateUserAndToken } from '@/utils/access';
+import {
+  STORAGE_QUOTA_GRACE_BYTES,
+  getStoragePlanData,
+  validateUserAndToken,
+} from '@/utils/access';
 import { getDownloadSignedUrl, getUploadSignedUrl } from '@/utils/object';
 import { READEST_PUBLIC_STORAGE_BASE_URL } from '@/services/constants';
 
@@ -18,14 +22,18 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   }
 
   const { fileName, fileSize, bookHash, temp = false } = req.body;
+  const numericFileSize = Number(fileSize);
   if (temp) {
     try {
+      if (!fileName || !Number.isFinite(numericFileSize) || numericFileSize <= 0) {
+        return res.status(400).json({ error: 'Missing or invalid file info' });
+      }
       const datetime = new Date();
       const timeStr = datetime.toISOString().replace(/[-:]/g, '').replace('T', '').slice(0, 10);
       const userStr = user.id.slice(0, 8);
       const fileKey = `temp/img/${timeStr}/${userStr}/${fileName}`;
       const bucketName = process.env['TEMP_STORAGE_PUBLIC_BUCKET_NAME'] || '';
-      const uploadUrl = await getUploadSignedUrl(fileKey, fileSize, 1800, bucketName);
+      const uploadUrl = await getUploadSignedUrl(fileKey, numericFileSize, 1800, bucketName);
       const downloadUrl = await getDownloadSignedUrl(fileKey, 3 * 86400, bucketName);
       const pathname = new URL(downloadUrl).pathname;
       const publicBaseUrl = READEST_PUBLIC_STORAGE_BASE_URL;
@@ -41,7 +49,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   }
 
   try {
-    if (!fileName || !fileSize) {
+    if (!fileName || !Number.isFinite(numericFileSize) || numericFileSize <= 0) {
       return res.status(400).json({ error: 'Missing file info' });
     }
 
@@ -58,10 +66,15 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     if (fetchError && fetchError.code !== 'PGRST116') {
       return res.status(500).json({ error: fetchError.message });
     }
-    let objSize = fileSize;
+    let objSize = numericFileSize;
     if (existingRecord) {
       objSize = existingRecord.file_size;
     } else {
+      const { usage, quota } = getStoragePlanData(token);
+      if (usage + numericFileSize > quota + STORAGE_QUOTA_GRACE_BYTES) {
+        return res.status(413).json({ error: 'Storage quota exceeded' });
+      }
+
       const { data: inserted, error: insertError } = await supabase
         .from('files')
         .insert([
@@ -69,7 +82,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
             user_id: user.id,
             book_hash: bookHash,
             file_key: fileKey,
-            file_size: fileSize,
+            file_size: numericFileSize,
           },
         ])
         .select()

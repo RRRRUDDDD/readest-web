@@ -6,6 +6,7 @@ import {
   createOrUpdateSubscription,
 } from '@/libs/payment/stripe/server';
 import { validateUserAndToken } from '@/utils/access';
+import { createSupabaseAdminClient } from '@/utils/supabase';
 
 export async function POST(request: Request) {
   const { sessionId } = await request.json();
@@ -18,8 +19,30 @@ export async function POST(request: Request) {
   try {
     const stripe = getStripe();
     const session = await stripe.checkout.sessions.retrieve(sessionId);
+    const customerId = session.customer as string | null;
 
-    const customerId = session.customer as string;
+    const supabase = createSupabaseAdminClient();
+    const { data: customerData } = await supabase
+      .from('customers')
+      .select('stripe_customer_id')
+      .eq('user_id', user.id)
+      .single();
+
+    const sessionUserId = session.metadata?.['userId'];
+    if (
+      (sessionUserId && sessionUserId !== user.id) ||
+      (customerId && customerData?.stripe_customer_id !== customerId)
+    ) {
+      return NextResponse.json(
+        { error: 'Checkout session does not belong to user' },
+        { status: 403 },
+      );
+    }
+
+    if (!customerId) {
+      return NextResponse.json({ error: 'Checkout session is missing customer' }, { status: 400 });
+    }
+
     if (session.payment_status === 'paid' && session.subscription) {
       await createOrUpdateSubscription(user.id, customerId, session.subscription as string);
     } else if (session.payment_status === 'paid' && session.payment_intent) {

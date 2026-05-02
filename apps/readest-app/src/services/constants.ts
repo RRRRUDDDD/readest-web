@@ -750,9 +750,9 @@ export const ZOOM_STEP = 10;
 export const SHOW_UNREAD_STATUS_BADGE = false;
 
 export const DEFAULT_STORAGE_QUOTA: UserStorageQuota = {
-  free: 500 * 1024 * 1024,
-  plus: 5 * 1024 * 1024 * 1024,
-  pro: 20 * 1024 * 1024 * 1024,
+  free: 10 * 1024 * 1024 * 1024,
+  plus: 10 * 1024 * 1024 * 1024,
+  pro: 10 * 1024 * 1024 * 1024,
   purchase: 0,
 };
 

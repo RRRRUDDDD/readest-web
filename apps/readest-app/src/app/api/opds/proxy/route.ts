@@ -1,6 +1,67 @@
 import { READEST_OPDS_USER_AGENT } from '@/services/constants';
 import { NextRequest, NextResponse } from 'next/server';
 import { deserializeOPDSCustomHeaders } from '@/app/opds/utils/customHeaders';
+import { isLanAddress } from '@/utils/network';
+
+const BLOCKED_REQUEST_HEADERS = new Set([
+  'authorization',
+  'connection',
+  'content-length',
+  'cookie',
+  'host',
+  'proxy-authorization',
+  'te',
+  'transfer-encoding',
+  'upgrade',
+]);
+const HEADER_NAME_RE = /^[!#$%&'*+\-.^_`|~0-9A-Za-z]+$/;
+const MAX_HEADER_VALUE_LENGTH = 2048;
+const MAX_BUFFER_BYTES = 50 * 1024 * 1024;
+
+const extractUrlParameter = (requestUrl: string) => {
+  const urlParamStart = requestUrl.indexOf('url=');
+  if (urlParamStart < 0) return '';
+
+  const valueStart = urlParamStart + 4;
+  const boundaries = ['&stream=', '&auth=', '&headers=']
+    .map((marker) => requestUrl.lastIndexOf(marker))
+    .filter((index) => index > valueStart);
+  const valueEnd = boundaries.length ? Math.min(...boundaries) : requestUrl.length;
+  return decodeURIComponent(requestUrl.substring(valueStart, valueEnd));
+};
+
+const validateProxyTarget = (url: string): string | null => {
+  try {
+    const parsed = new URL(url);
+    if (!['http:', 'https:'].includes(parsed.protocol)) {
+      return 'Only HTTP and HTTPS OPDS URLs are supported';
+    }
+    if (parsed.username || parsed.password) {
+      return 'Credentials in OPDS URLs are not allowed; use catalog authentication settings';
+    }
+    if (isLanAddress(parsed.toString()) || parsed.hostname.endsWith('.local')) {
+      return 'Private network OPDS URLs cannot be fetched through the web proxy';
+    }
+    return null;
+  } catch {
+    return 'Invalid URL format';
+  }
+};
+
+const applyCustomHeaders = (headers: Headers, customHeaders: Record<string, string>) => {
+  for (const [key, value] of Object.entries(customHeaders)) {
+    const normalizedKey = key.toLowerCase();
+    if (
+      HEADER_NAME_RE.test(key) &&
+      !normalizedKey.startsWith('sec-') &&
+      !normalizedKey.startsWith('proxy-') &&
+      !BLOCKED_REQUEST_HEADERS.has(normalizedKey) &&
+      value.length <= MAX_HEADER_VALUE_LENGTH
+    ) {
+      headers.set(key, value);
+    }
+  }
+};
 
 async function handleRequest(request: NextRequest, method: 'GET' | 'HEAD') {
   // Cloudflare Workers incorrectly decodes %26 to & in the url parameter value,
@@ -8,17 +69,7 @@ async function handleRequest(request: NextRequest, method: 'GET' | 'HEAD') {
   // treated as separate top-level parameters instead of part of the url value.
   // We work around this by manually extracting the url parameter - capturing everything
   // from 'url=' until we hit our known parameters (&stream=, &auth=, or &headers=), then decoding it.
-  const fullUrl = request.url;
-  const urlParamStart = fullUrl.indexOf('url=') + 4;
-  const streamParam = fullUrl.lastIndexOf('&stream=');
-  const authParam = fullUrl.lastIndexOf('&auth=');
-  const headersParam = fullUrl.lastIndexOf('&headers=');
-  const urlParamEnd = Math.min(
-    ...[streamParam, authParam, headersParam].filter((i) => i > 0),
-    fullUrl.length,
-  );
-  const encodedUrl = fullUrl.substring(urlParamStart, urlParamEnd);
-  const url = decodeURIComponent(encodedUrl);
+  const url = extractUrlParameter(request.url);
   const auth = request.nextUrl.searchParams.get('auth');
   const stream = request.nextUrl.searchParams.get('stream');
   const customHeaders = deserializeOPDSCustomHeaders(request.nextUrl.searchParams.get('headers'));
@@ -30,10 +81,9 @@ async function handleRequest(request: NextRequest, method: 'GET' | 'HEAD') {
     );
   }
 
-  try {
-    new URL(url);
-  } catch {
-    return NextResponse.json({ error: 'Invalid URL format' }, { status: 400 });
+  const validationError = validateProxyTarget(url);
+  if (validationError) {
+    return NextResponse.json({ error: validationError }, { status: 400 });
   }
 
   try {
@@ -46,9 +96,7 @@ async function handleRequest(request: NextRequest, method: 'GET' | 'HEAD') {
       Accept: 'application/atom+xml, application/xml, text/xml, application/json, */*',
     });
 
-    for (const [key, value] of Object.entries(customHeaders)) {
-      headers.set(key, value);
-    }
+    applyCustomHeaders(headers, customHeaders);
 
     if (auth) {
       headers.set('Authorization', auth);
@@ -174,7 +222,8 @@ async function handleRequest(request: NextRequest, method: 'GET' | 'HEAD') {
       });
     }
 
-    if (stream === 'true' && contentLength && parseInt(contentLength) > 1024 * 1024) {
+    const contentLengthNumber = contentLength ? parseInt(contentLength) : 0;
+    if (stream === 'true' && contentLength && contentLengthNumber > 1024 * 1024) {
       console.log(`[OPDS Proxy] Streaming: ${url} (${contentLength} bytes)`);
       const headers = buildResponseHeaders({
         'Content-Type': contentType,
@@ -186,8 +235,20 @@ async function handleRequest(request: NextRequest, method: 'GET' | 'HEAD') {
       });
       return new NextResponse(response.body, { status: 200, headers });
     } else {
+      if (contentLengthNumber > MAX_BUFFER_BYTES) {
+        return NextResponse.json(
+          { error: 'Response is too large to buffer; retry as a streamed download' },
+          { status: 413 },
+        );
+      }
       const buf = await response.arrayBuffer();
       const length = buf.byteLength;
+      if (length > MAX_BUFFER_BYTES) {
+        return NextResponse.json(
+          { error: 'Response is too large to buffer; retry as a streamed download' },
+          { status: 413 },
+        );
+      }
       console.log(`[OPDS Proxy] Buffered Success: ${url} (${length} bytes)`);
       return new NextResponse(buf, {
         status: 200,

@@ -12,7 +12,7 @@ PNPM_VERSION = "10.33.0"
 NEXT_PUBLIC_SUPABASE_URL = "https://cdnvrfnbqgnybmzffdlq.supabase.co"
 NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY = "sb_publishable_mAD4CIrx-QQJUbYq5LMBUg_mAkVpSXI"
 NEXT_PUBLIC_API_BASE_URL = "https://readest-web.pages.dev"
-STORAGE_FIXED_QUOTA = "5368709120"
+STORAGE_FIXED_QUOTA = "10737418240"
 
 [[kv_namespaces]]
 binding = "TRANSLATIONS_KV"

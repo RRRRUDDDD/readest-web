@@ -15,6 +15,13 @@ export async function onRequestPut({ request, env }) {
   if (verified.error) return json({ error: verified.error }, { status: 403 });
 
   try {
+    if (verified.size !== null) {
+      const contentLength = Number(request.headers.get('content-length') || 0);
+      if (!contentLength || contentLength !== verified.size) {
+        return json({ error: 'Invalid upload size' }, { status: 413 });
+      }
+    }
+
     await getObjectBucket(env).put(verified.fileKey, request.body, {
       httpMetadata: {
         contentType: request.headers.get('content-type') || 'application/octet-stream',
