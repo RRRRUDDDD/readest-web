@@ -52,6 +52,7 @@ const nextConfig = {
   assetPrefix: '',
   reactStrictMode: true,
   serverExternalPackages: ['isows'],
+  allowedDevOrigins: ['192.168.2.120'],
   webpack: (config) => {
     config.resolve.alias = {
       ...config.resolve.alias,
