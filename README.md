@@ -208,6 +208,19 @@ https://read.yoshinagakoi.eu.org/
 
 如果你更想使用传统 Cloudflare Pages 静态站点，也可以继续走静态导出。构建前需要指定 Web 平台和 `NEXT_OUTPUT=export`。
 
+仓库已提供 GitHub Actions 自动部署：
+
+```text
+.github/workflows/deploy-cloudflare-pages.yml
+```
+
+它会在 `main` 分支每次 push 后构建静态产物并部署到 Cloudflare Pages。启用前需要在 GitHub 仓库的 `Settings` -> `Secrets and variables` -> `Actions` 中配置：
+
+| Secret 名称             | 说明                         |
+| ----------------------- | ---------------------------- |
+| `CLOUDFLARE_API_TOKEN`  | 有 Cloudflare Pages 部署权限 |
+| `CLOUDFLARE_ACCOUNT_ID` | Cloudflare 账号 ID           |
+
 PowerShell：
 
 ```powershell
