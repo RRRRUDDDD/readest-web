@@ -17,10 +17,23 @@ export const makeComicBook = async ({ entries, loadBlob, getSize, getComment }, 
     }
 
     const exts = ['.jpg', '.jpeg', '.png', '.gif', '.bmp', '.webp', '.svg', '.jxl', '.avif']
+    // Natural-numeric sort by path segment so that page2 < page10 < page100,
+    // and so multi-level chapter folders (ch2/p1 < ch10/p1) order correctly.
+    // Bare `Array.prototype.sort()` defaults to UTF-16 code-unit order, which
+    // mis-orders any CBZ whose images aren't zero-padded.
+    const collator = new Intl.Collator(undefined, { numeric: true, sensitivity: 'base' })
+    const comparePath = (a, b) => {
+        const as = a.split(/[\\/]+/), bs = b.split(/[\\/]+/)
+        for (let i = 0; i < Math.min(as.length, bs.length); i++) {
+            const r = collator.compare(as[i], bs[i])
+            if (r) return r
+        }
+        return as.length - bs.length || a.localeCompare(b)
+    }
     const files = entries
         .map(entry => entry.filename)
         .filter(name => exts.some(ext => name.endsWith(ext)))
-        .sort()
+        .sort(comparePath)
     if (!files.length) throw new Error('No supported image files in archive')
 
     const book = {}
