@@ -20,12 +20,6 @@ vi.mock('@/services/tts/EdgeTTSClient', () => ({
   }),
 }));
 
-vi.mock('@/services/tts/NativeTTSClient', () => ({
-  NativeTTSClient: vi.fn().mockImplementation(function (this: Record<string, unknown>) {
-    Object.assign(this, createMockTTSClient('native'));
-  }),
-}));
-
 vi.mock('@/services/tts/TTSUtils', () => ({
   TTSUtils: {
     getPreferredClient: vi.fn().mockReturnValue(null),
@@ -208,16 +202,6 @@ describe('TTSController', () => {
       expect(controller.ttsClient.name).toBe('web');
     });
 
-    test('creates native client when isAndroidApp', () => {
-      const androidService = createMockAppService(true);
-      const c = new TTSController(androidService, mockView);
-      expect(c.ttsNativeClient).not.toBeNull();
-    });
-
-    test('does not create native client when not Android', () => {
-      expect(controller.ttsNativeClient).toBeNull();
-    });
-
     test('stores preprocessCallback', () => {
       const cb = vi.fn();
       const c = new TTSController(mockAppService, mockView, false, cb);
@@ -264,14 +248,6 @@ describe('TTSController', () => {
       // first available is edge
       expect(controller.ttsClient.name).toBe('edge');
     });
-
-    test('also initializes native client on Android', async () => {
-      const androidService = createMockAppService(true);
-      const c = new TTSController(androidService, mockView);
-      await c.init();
-      expect(c.ttsNativeClient!.init).toHaveBeenCalled();
-      expect(c.ttsNativeClient!.getAllVoices).toHaveBeenCalled();
-    });
   });
 
   describe('setRate', () => {
@@ -298,31 +274,11 @@ describe('TTSController', () => {
       expect(TTSUtils.setPreferredVoice).toHaveBeenCalledWith('edge', 'en', 'edge-voice-1');
     });
 
-    test('switches to web client when voice not in edge or native', async () => {
+    test('switches to web client when voice not in edge', async () => {
       controller.ttsEdgeVoices = [{ id: 'edge-voice-1', name: 'Edge Voice', lang: 'en-US' }];
       await controller.setVoice('unknown-voice', 'en');
 
       expect(controller.ttsClient.name).toBe('web');
-    });
-
-    test('switches to native client when voice found in native voices', async () => {
-      const androidService = createMockAppService(true);
-      const c = new TTSController(androidService, mockView);
-      await c.init();
-      c.ttsNativeVoices = [{ id: 'native-v', name: 'Native', lang: 'en-US' }];
-      await c.setVoice('native-v', 'en');
-
-      expect(c.ttsClient.name).toBe('native');
-    });
-
-    test('throws when native voice found but native client unavailable', async () => {
-      // non-android, ttsNativeClient is null, but we force nativeVoices
-      controller.ttsNativeVoices = [{ id: 'native-v', name: 'Native', lang: 'en-US' }];
-      controller.ttsEdgeVoices = [];
-
-      await expect(controller.setVoice('native-v', 'en')).rejects.toThrow(
-        'Native TTS client is not available',
-      );
     });
 
     test('skips disabled voices', async () => {
@@ -361,22 +317,6 @@ describe('TTSController', () => {
 
       const result = await controller.getVoices('en');
       expect(result).toEqual([...edgeVoices, ...webVoices]);
-    });
-
-    test('includes native voices when available', async () => {
-      const androidService = createMockAppService(true);
-      const c = new TTSController(androidService, mockView);
-      await c.init();
-
-      const nativeVoices: TTSVoicesGroup[] = [
-        { id: 'ng', name: 'Native', voices: [{ id: 'n1', name: 'N1', lang: 'en-US' }] },
-      ];
-      vi.mocked(c.ttsNativeClient!.getVoices).mockResolvedValue(nativeVoices);
-      vi.mocked(c.ttsEdgeClient.getVoices).mockResolvedValue([]);
-      vi.mocked(c.ttsWebClient.getVoices).mockResolvedValue([]);
-
-      const result = await c.getVoices('en');
-      expect(result).toEqual(nativeVoices);
     });
   });
 
@@ -486,7 +426,7 @@ describe('TTSController', () => {
     });
 
     test('error preserves state for our internal Aborted message', () => {
-      // EdgeTTSClient and NativeTTSClient resolve the inner promise with
+      // EdgeTTSClient resolves the inner promise with
       // { code: 'error', message: 'Aborted' } on signal abort; if that bubbles
       // through any catch path it must not flip state to 'stopped'.
       controller.state = 'playing';
@@ -565,18 +505,6 @@ describe('TTSController', () => {
       expect(mockView.tts).toBeNull();
       expect(controller.ttsWebClient.shutdown).toHaveBeenCalled();
       expect(controller.ttsEdgeClient.shutdown).toHaveBeenCalled();
-    });
-
-    test('shuts down native client when initialized', async () => {
-      const androidService = createMockAppService(true);
-      const c = new TTSController(androidService, mockView);
-      await c.init();
-      c.ttsNativeClient!.initialized = true;
-
-      vi.spyOn(c, 'stop').mockResolvedValue();
-      await c.shutdown();
-
-      expect(c.ttsNativeClient!.shutdown).toHaveBeenCalled();
     });
 
     test('skips shutdown of uninitialized clients', async () => {

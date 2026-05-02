@@ -19,14 +19,9 @@ import { useTransferQueue } from '@/hooks/useTransferQueue';
 import { eventDispatcher } from '@/utils/event';
 import { interceptWindowOpen } from '@/utils/open';
 import { mountAdditionalFonts } from '@/styles/fonts';
-import { isTauriAppPlatform } from '@/services/environment';
 import { getSysFontsList, setSystemUIVisibility } from '@/utils/bridge';
-import { AboutWindow } from '@/components/AboutWindow';
 import { KeyboardShortcutsHelp } from '@/components/KeyboardShortcutsHelp';
-import { UpdaterWindow } from '@/components/UpdaterWindow';
-import { KOSyncSettingsWindow } from './KOSyncSettings';
 import { ReadwiseSettingsWindow } from './ReadwiseSettings';
-import { HardcoverSettingsWindow } from './HardcoverSettings';
 import { ProofreadRulesManager } from './ProofreadRules';
 import { Toast } from '@/components/Toast';
 import { getLocale } from '@/utils/misc';
@@ -39,7 +34,7 @@ Z-Index Layering Guide:
 99 – Window Border (Linux only)
      • Ensures the border stays on top of all UI elements.
 50 – Loading Progress / Toast Notifications / Dialogs / Popups
-     • Includes Settings, About, Updater, KOSync dialogs and Annotation popups.
+     • Includes Settings, About, Updater, Readwise dialogs and Annotation popups.
 45 – Sidebar / Notebook (Unpinned)
      • Floats above the content but below global dialogs.
 40 – TTS Bar
@@ -77,9 +72,7 @@ const Reader: React.FC<{ ids?: string }> = ({ ids }) => {
   useEffect(() => {
     mountAdditionalFonts(document);
     interceptWindowOpen();
-    if (isTauriAppPlatform()) {
-      setTimeout(getSysFontsList, 3000);
-    }
+    setTimeout(getSysFontsList, 3000);
     initDayjs(getLocale());
   }, []);
 
@@ -173,12 +166,8 @@ const Reader: React.FC<{ ids?: string }> = ({ ids }) => {
     >
       <Suspense fallback={<div className='full-height'></div>}>
         <ReaderContent ids={ids} settings={settings} />
-        <AboutWindow />
         <KeyboardShortcutsHelp />
-        <UpdaterWindow />
-        <KOSyncSettingsWindow />
         <ReadwiseSettingsWindow />
-        <HardcoverSettingsWindow />
         <ProofreadRulesManager />
         <Toast />
       </Suspense>

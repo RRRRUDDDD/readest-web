@@ -6,7 +6,7 @@ import { useSidebarStore } from '@/store/sidebarStore';
 import { useSettingsStore } from '@/store/settingsStore';
 import { useBookDataStore } from '@/store/bookDataStore';
 import { useCommandPalette } from '@/components/command-palette';
-import { tauriHandleClose, tauriHandleToggleFullScreen, tauriQuitApp } from '@/utils/window';
+import { handleClose, handleToggleFullScreen } from '@/utils/window';
 import { eventDispatcher } from '@/utils/event';
 import { setShortcutsDialogVisible } from '@/components/KeyboardShortcutsHelp';
 import { MAX_ZOOM_LEVEL, MIN_ZOOM_LEVEL, ZOOM_STEP } from '@/services/constants';
@@ -182,20 +182,20 @@ const useBookShortcuts = ({ sideBarBookKey, bookKeys }: UseBookShortcutsProps) =
 
   const toggleFullscreen = async () => {
     if (isTauriAppPlatform()) {
-      await tauriHandleToggleFullScreen();
+      await handleToggleFullScreen();
     }
   };
 
   const closeWindow = async () => {
     if (isTauriAppPlatform()) {
-      await tauriHandleClose();
+      await handleClose();
     }
   };
 
   const quitApp = async () => {
     // on web platform use browser's default shortcut to close the tab
     if (isTauriAppPlatform()) {
-      await tauriQuitApp();
+      await quitApp();
     }
   };
 

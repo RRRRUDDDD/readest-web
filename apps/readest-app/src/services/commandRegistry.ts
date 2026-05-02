@@ -629,16 +629,6 @@ const actionItems = [
     labelKey: _('Open Last Book on Start'),
     keywords: ['open', 'last', 'book', 'start', 'resume'],
   },
-  {
-    id: 'action.about',
-    labelKey: _('About Readest'),
-    keywords: ['about', 'readest', 'version', 'info'],
-  },
-  {
-    id: 'action.telemetry',
-    labelKey: _('Help improve Readest'),
-    keywords: ['telemetry', 'analytics', 'improve', 'statistics'],
-  },
 ];
 
 export interface CommandRegistryOptions {
@@ -651,8 +641,6 @@ export interface CommandRegistryOptions {
   toggleAutoUpload: () => void;
   reloadPage: () => void;
   toggleOpenLastBooks: () => void;
-  showAbout: () => void;
-  toggleTelemetry: () => void;
   isDesktop: boolean;
   // TODO: add reader-specific actions when reader is open (tts, bookmark, etc.)
 }
@@ -793,20 +781,6 @@ export const buildCommandRegistry = (options: CommandRegistryOptions): CommandIt
       id: 'action.openLastBooks',
       action: options.toggleOpenLastBooks,
       isAvailable: () => isDesktop,
-    }),
-  );
-
-  items.push(
-    createActionItem({
-      id: 'action.about',
-      action: options.showAbout,
-    }),
-  );
-
-  items.push(
-    createActionItem({
-      id: 'action.telemetry',
-      action: options.toggleTelemetry,
     }),
   );
 

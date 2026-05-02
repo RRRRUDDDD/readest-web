@@ -1,10 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useEnv } from '@/context/EnvContext';
-import { impactFeedback } from '@tauri-apps/plugin-haptics';
 import { eventDispatcher } from '@/utils/event';
 import { SelectedFile } from '@/hooks/useFileSelector';
-import { isTauriAppPlatform } from '@/services/environment';
-import { getCurrentWebview } from '@tauri-apps/api/webview';
 import { useTranslation } from '@/hooks/useTranslation';
 import { BOOK_ACCEPT_FORMATS } from '@/services/constants';
 import { useSearchParams } from 'next/navigation';
@@ -36,10 +33,6 @@ export const useDragDropImport = () => {
         type: 'error',
       });
       return;
-    }
-
-    if (appService?.hasHaptics) {
-      impactFeedback('medium');
     }
 
     const selectedFiles = supportedFiles.map(
@@ -81,22 +74,6 @@ export const useDragDropImport = () => {
       libraryPage?.addEventListener('dragover', handleDragOver as unknown as EventListener);
       libraryPage?.addEventListener('dragleave', handleDragLeave as unknown as EventListener);
       libraryPage?.addEventListener('drop', handleDrop as unknown as EventListener);
-    }
-
-    if (isTauriAppPlatform()) {
-      const unlisten = getCurrentWebview().onDragDropEvent((event) => {
-        if (event.payload.type === 'over') {
-          setIsDragging(true);
-        } else if (event.payload.type === 'drop') {
-          setIsDragging(false);
-          handleDroppedFiles(event.payload.paths);
-        } else {
-          setIsDragging(false);
-        }
-      });
-      return () => {
-        unlisten.then((fn) => fn());
-      };
     }
 
     return () => {

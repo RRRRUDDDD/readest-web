@@ -1,6 +1,3 @@
-import { openUrl } from '@tauri-apps/plugin-opener';
-import { isTauriAppPlatform } from '@/services/environment';
-
 export const interceptWindowOpen = () => {
   const windowOpen = window.open;
   globalThis.open = function (
@@ -8,11 +5,6 @@ export const interceptWindowOpen = () => {
     target?: string,
     features?: string,
   ): Window | null {
-    if (isTauriAppPlatform()) {
-      openUrl(url?.toString() || '');
-      return null;
-    } else {
-      return windowOpen(url, target, features);
-    }
+    return windowOpen(url, target, features);
   };
 };

@@ -1,9 +1,5 @@
 import { create } from 'zustand';
-import { invoke } from '@tauri-apps/api/core';
 import { AppService } from '@/types/system';
-
-const WINDOW_CONTROL_PAD_X = 10.0;
-const WINDOW_CONTROL_PAD_Y = 22.0;
 
 interface TrafficLightState {
   appService?: AppService;
@@ -33,42 +29,16 @@ export const useTrafficLightStore = create<TrafficLightState>((set, get) => {
       });
     },
 
-    setTrafficLightVisibility: async (visible: boolean, position?: { x: number; y: number }) => {
-      const { getCurrentWindow } = await import('@tauri-apps/api/window');
-      const currentWindow = getCurrentWindow();
-      const isFullscreen = await currentWindow.isFullscreen();
+    setTrafficLightVisibility: async (visible: boolean) => {
       set({
-        isTrafficLightVisible: !isFullscreen && visible,
+        isTrafficLightVisible: visible,
         shouldShowTrafficLight: visible,
-        trafficLightInFullscreen: isFullscreen,
-      });
-      invoke('set_traffic_lights', {
-        visible: visible,
-        x: position?.x ?? WINDOW_CONTROL_PAD_X,
-        y: position?.y ?? WINDOW_CONTROL_PAD_Y,
+        trafficLightInFullscreen: false,
       });
     },
 
     initializeTrafficLightListeners: async () => {
-      const { getCurrentWindow } = await import('@tauri-apps/api/window');
-      const currentWindow = getCurrentWindow();
-
-      const unlistenEnterFullScreen = await currentWindow.listen(
-        'will-enter-fullscreen',
-        async () => {
-          const fullscreen = await currentWindow.isFullscreen();
-          if (fullscreen) {
-            set({ isTrafficLightVisible: false, trafficLightInFullscreen: true });
-          }
-        },
-      );
-
-      const unlistenExitFullScreen = await currentWindow.listen('will-exit-fullscreen', () => {
-        const { shouldShowTrafficLight } = get();
-        set({ isTrafficLightVisible: shouldShowTrafficLight, trafficLightInFullscreen: false });
-      });
-
-      set({ unlistenEnterFullScreen, unlistenExitFullScreen });
+      set({ unlistenEnterFullScreen: undefined, unlistenExitFullScreen: undefined });
     },
 
     cleanupTrafficLightListeners: () => {

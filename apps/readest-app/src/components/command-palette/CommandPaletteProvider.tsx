@@ -6,8 +6,7 @@ import { useSettingsStore } from '@/store/settingsStore';
 import { useThemeStore } from '@/store/themeStore';
 import { useEnv } from '@/context/EnvContext';
 import { isTauriAppPlatform } from '@/services/environment';
-import { tauriHandleSetAlwaysOnTop, tauriHandleToggleFullScreen } from '@/utils/window';
-import { setAboutDialogVisible } from '@/components/AboutWindow';
+import { handleSetAlwaysOnTop, handleToggleFullScreen } from '@/utils/window';
 import { saveSysSettings } from '@/helpers/settings';
 import { SettingsPanelType } from '@/components/settings/SettingsDialog';
 import {
@@ -67,13 +66,13 @@ export const CommandPaletteProvider: React.FC<CommandPaletteProviderProps> = ({ 
   }, [themeMode, setThemeMode]);
 
   const toggleFullscreen = useCallback(() => {
-    tauriHandleToggleFullScreen();
+    handleToggleFullScreen();
   }, []);
 
   const toggleAlwaysOnTop = useCallback(() => {
     const newValue = !settings.alwaysOnTop;
     saveSysSettings(envConfig, 'alwaysOnTop', newValue);
-    tauriHandleSetAlwaysOnTop(newValue);
+    handleSetAlwaysOnTop(newValue);
   }, [envConfig, settings.alwaysOnTop]);
 
   const toggleScreenWakeLock = useCallback(() => {
@@ -94,15 +93,6 @@ export const CommandPaletteProvider: React.FC<CommandPaletteProviderProps> = ({ 
     const newValue = !settings.openLastBooks;
     saveSysSettings(envConfig, 'openLastBooks', newValue);
   }, [envConfig, settings.openLastBooks]);
-
-  const showAbout = useCallback(() => {
-    setAboutDialogVisible(true);
-  }, []);
-
-  const toggleTelemetry = useCallback(() => {
-    const newValue = !settings.telemetryEnabled;
-    saveSysSettings(envConfig, 'telemetryEnabled', newValue);
-  }, [envConfig, settings.telemetryEnabled]);
 
   const openSettingsPanel = useCallback(
     (_panel: SettingsPanelType, itemId?: string) => {
@@ -129,8 +119,6 @@ export const CommandPaletteProvider: React.FC<CommandPaletteProviderProps> = ({ 
         toggleAutoUpload,
         reloadPage,
         toggleOpenLastBooks,
-        showAbout,
-        toggleTelemetry,
         isDesktop,
       }),
     [
@@ -143,8 +131,6 @@ export const CommandPaletteProvider: React.FC<CommandPaletteProviderProps> = ({ 
       toggleAutoUpload,
       reloadPage,
       toggleOpenLastBooks,
-      showAbout,
-      toggleTelemetry,
       isDesktop,
     ],
   );

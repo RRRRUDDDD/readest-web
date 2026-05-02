@@ -7,10 +7,11 @@ declare global {
   }
 }
 
-export const isTauriAppPlatform = () => process.env['NEXT_PUBLIC_APP_PLATFORM'] === 'tauri';
-export const isWebAppPlatform = () => process.env['NEXT_PUBLIC_APP_PLATFORM'] === 'web';
-export const hasCli = () => window.__READEST_CLI_ACCESS === true;
-export const isPWA = () => window.matchMedia('(display-mode: standalone)').matches;
+export const isTauriAppPlatform = () => false;
+export const isWebAppPlatform = () => true;
+export const hasCli = () => typeof window !== 'undefined' && window.__READEST_CLI_ACCESS === true;
+export const isPWA = () =>
+  typeof window !== 'undefined' && window.matchMedia('(display-mode: standalone)').matches;
 export const getBaseUrl = () => process.env['NEXT_PUBLIC_API_BASE_URL'] ?? READEST_WEB_BASE_URL;
 export const getNodeBaseUrl = () =>
   process.env['NEXT_PUBLIC_NODE_BASE_URL'] ?? READEST_NODE_BASE_URL;
@@ -22,27 +23,23 @@ export const getCommandPaletteShortcut = () => (isMacPlatform() ? '⌘⇧P' : 'C
 
 const isWebDevMode = () => process.env['NODE_ENV'] === 'development' && isWebAppPlatform();
 
-// Dev API only in development mode and web platform
-// with command `pnpm dev-web`
-// for production build or tauri app use the production Web API
-export const getAPIBaseUrl = () => (isWebDevMode() ? '/api' : `${getBaseUrl()}/api`);
+// Dev API only in development mode and web platform with command `pnpm dev-web`.
+export const getAPIBaseUrl = () => {
+  if (isWebDevMode()) return '/api';
+  const apiBaseUrl = process.env['NEXT_PUBLIC_API_BASE_URL'];
+  return apiBaseUrl ? `${apiBaseUrl}/api` : '/api';
+};
 
 // For Node.js API that currently not supported in some edge runtimes
-export const getNodeAPIBaseUrl = () => (isWebDevMode() ? '/api' : `${getNodeBaseUrl()}/api`);
+export const getNodeAPIBaseUrl = () => {
+  if (isWebDevMode()) return '/api';
+  const nodeBaseUrl = process.env['NEXT_PUBLIC_NODE_BASE_URL'];
+  return nodeBaseUrl ? `${nodeBaseUrl}/api` : getAPIBaseUrl();
+};
 
 export interface EnvConfigType {
   getAppService: () => Promise<AppService>;
 }
-
-let nativeAppService: AppService | null = null;
-const getNativeAppService = async () => {
-  if (!nativeAppService) {
-    const { NativeAppService } = await import('@/services/nativeAppService');
-    nativeAppService = new NativeAppService();
-    await nativeAppService.init();
-  }
-  return nativeAppService;
-};
 
 let webAppService: AppService | null = null;
 const getWebAppService = async () => {
@@ -55,13 +52,7 @@ const getWebAppService = async () => {
 };
 
 const environmentConfig: EnvConfigType = {
-  getAppService: async () => {
-    if (isTauriAppPlatform()) {
-      return getNativeAppService();
-    } else {
-      return getWebAppService();
-    }
-  },
+  getAppService: getWebAppService,
 };
 
 export default environmentConfig;

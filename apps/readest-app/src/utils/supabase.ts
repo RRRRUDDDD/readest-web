@@ -7,6 +7,7 @@ const supabaseUrl =
 const supabaseAnonKey =
   process.env['SUPABASE_ANON_KEY'] ||
   process.env['NEXT_PUBLIC_SUPABASE_ANON_KEY'] ||
+  process.env['NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY'] ||
   atob(process.env['NEXT_PUBLIC_DEFAULT_SUPABASE_KEY_BASE64']!);
 
 export const supabase = createClient(supabaseUrl, supabaseAnonKey);

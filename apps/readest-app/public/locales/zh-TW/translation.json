@@ -148,6 +148,7 @@
   "Your password": "您的密碼",
   "Sign in": "登入",
   "Signing in...": "正在登入...",
+  "Invalid username or password": "用戶名或密碼錯誤",
   "Sign in with {{provider}}": "使用 {{provider}} 登入",
   "Already have an account? Sign in": "已經有帳號？登入",
   "Create a Password": "創建密碼",

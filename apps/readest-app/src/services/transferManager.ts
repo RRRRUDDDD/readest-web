@@ -7,6 +7,7 @@ import { eventDispatcher } from '@/utils/event';
 
 const TRANSFER_QUEUE_KEY = 'readest_transfer_queue';
 const RETRY_DELAY_BASE_MS = 2000;
+const MAX_PERSISTED_COMPLETED_TRANSFERS = 100;
 
 interface PersistedQueueData {
   transfers: Record<string, TransferItem>;
@@ -238,11 +239,17 @@ class TransferManager {
       }
 
       if (transfer.type === 'upload') {
-        await this.appService.uploadBook(book, progressHandler);
+        await this.appService.uploadBook(book, progressHandler, abortController.signal);
         book.uploadedAt = Date.now();
         await this.updateBook(book);
       } else if (transfer.type === 'download') {
-        await this.appService.downloadBook(book, false, false, progressHandler);
+        await this.appService.downloadBook(
+          book,
+          false,
+          false,
+          progressHandler,
+          abortController.signal,
+        );
         book.downloadedAt = Date.now();
         await this.updateBook(book);
       } else if (transfer.type === 'delete') {
@@ -293,11 +300,6 @@ class TransferManager {
           eventDispatcher.dispatch('toast', {
             type: 'error',
             message: _('Please log in to continue'),
-          });
-        } else if (errorMessage.includes('Insufficient storage quota')) {
-          eventDispatcher.dispatch('toast', {
-            type: 'error',
-            message: _('Insufficient storage quota'),
           });
         } else {
           const errorMessages = {
@@ -351,10 +353,15 @@ class TransferManager {
       if (typeof localStorage === 'undefined') return;
 
       const store = useTransferStore.getState();
+      const transferEntries = Object.entries(store.transfers);
+      const completed = transferEntries
+        .filter(([, transfer]) => transfer.status === 'completed')
+        .sort(([, a], [, b]) => (b.completedAt ?? b.createdAt) - (a.completedAt ?? a.createdAt))
+        .slice(0, MAX_PERSISTED_COMPLETED_TRANSFERS);
+      const active = transferEntries.filter(([, transfer]) => transfer.status !== 'completed');
 
-      // Persist all transfers including completed (for history)
       const data: PersistedQueueData = {
-        transfers: store.transfers,
+        transfers: Object.fromEntries([...active, ...completed]),
         isQueuePaused: store.isQueuePaused,
       };
 

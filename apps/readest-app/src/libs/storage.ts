@@ -1,15 +1,8 @@
-import { getAPIBaseUrl, isWebAppPlatform } from '@/services/environment';
+import { getAPIBaseUrl } from '@/services/environment';
 import { AppService } from '@/types/system';
 import { getUserID } from '@/utils/access';
 import { fetchWithAuth } from '@/utils/fetch';
-import {
-  tauriUpload,
-  tauriDownload,
-  webUpload,
-  webDownload,
-  ProgressHandler,
-  ProgressPayload,
-} from '@/utils/transfer';
+import { webUpload, webDownload, ProgressHandler, ProgressPayload } from '@/utils/transfer';
 
 const API_ENDPOINTS = {
   upload: getAPIBaseUrl() + '/storage/upload',
@@ -41,10 +34,11 @@ export const createProgressHandler = (
 
 export const uploadFile = async (
   file: File,
-  fileFullPath: string,
+  _fileFullPath: string,
   onProgress?: ProgressHandler,
   bookHash?: string,
   temp = false,
+  signal?: AbortSignal,
 ) => {
   try {
     const response = await fetchWithAuth(API_ENDPOINTS.upload, {
@@ -62,11 +56,7 @@ export const uploadFile = async (
 
     const { uploadUrl, downloadUrl }: { uploadUrl: string; downloadUrl?: string } =
       await response.json();
-    if (isWebAppPlatform()) {
-      await webUpload(file, uploadUrl, onProgress);
-    } else {
-      await tauriUpload(uploadUrl, fileFullPath, 'PUT', onProgress);
-    }
+    await webUpload(file, uploadUrl, onProgress, signal);
     return temp ? downloadUrl : undefined;
   } catch (error) {
     console.error('File upload failed:', error);
@@ -117,6 +107,7 @@ type DownloadFileParams = {
   singleThreaded?: boolean;
   skipSslVerification?: boolean;
   onProgress?: ProgressHandler;
+  signal?: AbortSignal;
 };
 
 export const downloadFile = async ({
@@ -125,9 +116,10 @@ export const downloadFile = async ({
   cfp,
   url,
   headers,
-  singleThreaded,
-  skipSslVerification,
+  singleThreaded: _singleThreaded,
+  skipSslVerification: _skipSslVerification,
   onProgress,
+  signal,
 }: DownloadFileParams) => {
   try {
     let downloadUrl = url;
@@ -152,25 +144,14 @@ export const downloadFile = async ({
       throw new Error('No download URL available');
     }
 
-    if (isWebAppPlatform()) {
-      const { headers: responseHeaders, blob } = await webDownload(
-        downloadUrl,
-        onProgress,
-        headers,
-      );
-      await appService.writeFile(dst, 'None', await blob.arrayBuffer());
-      return responseHeaders;
-    } else {
-      return await tauriDownload(
-        downloadUrl,
-        dst,
-        onProgress,
-        headers,
-        undefined,
-        singleThreaded,
-        skipSslVerification,
-      );
-    }
+    const { headers: responseHeaders, blob } = await webDownload(
+      downloadUrl,
+      onProgress,
+      headers,
+      signal,
+    );
+    await appService.writeFile(dst, 'None', await blob.arrayBuffer());
+    return responseHeaders;
   } catch (error) {
     console.error(`File '${dst}' download failed:`, error);
     throw error;

@@ -1,1 +1,1 @@
-export { createTauriAdapter, getLastSources, clearLastSources } from './TauriChatAdapter';
+export { createChatAdapter, getLastSources, clearLastSources } from './ChatAdapter';

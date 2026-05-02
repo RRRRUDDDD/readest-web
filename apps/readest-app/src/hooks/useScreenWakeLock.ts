@@ -1,10 +1,7 @@
 import { useEffect, useRef } from 'react';
-import { getCurrentWindow } from '@tauri-apps/api/window';
-import { isTauriAppPlatform, isWebAppPlatform } from '@/services/environment';
 
 export const useScreenWakeLock = (lock: boolean) => {
   const wakeLockRef = useRef<WakeLockSentinel | null>(null);
-  const unlistenOnFocusChangedRef = useRef<Promise<() => void> | null>(null);
 
   useEffect(() => {
     const requestWakeLock = async () => {
@@ -45,27 +42,14 @@ export const useScreenWakeLock = (lock: boolean) => {
       releaseWakeLock();
     }
 
-    if (isWebAppPlatform() && lock) {
+    if (lock) {
       document.addEventListener('visibilitychange', handleVisibilityChange);
-    } else if (isTauriAppPlatform() && lock) {
-      unlistenOnFocusChangedRef.current = getCurrentWindow().onFocusChanged(
-        ({ payload: focused }) => {
-          if (focused) {
-            requestWakeLock();
-          } else {
-            releaseWakeLock();
-          }
-        },
-      );
     }
 
     return () => {
       releaseWakeLock();
-      if (isWebAppPlatform() && lock) {
+      if (lock) {
         document.removeEventListener('visibilitychange', handleVisibilityChange);
-      }
-      if (unlistenOnFocusChangedRef.current) {
-        unlistenOnFocusChangedRef.current.then((f) => f());
       }
     };
   }, [lock]);

@@ -27,7 +27,11 @@
       "@simplecc/*": ["./public/vendor/simplecc/*"],
       "js-mdict": ["../../packages/js-mdict/src/index.ts"],
       "fflate": ["./node_modules/fflate"],
-      "tauri-plugin-turso": ["./src-tauri/plugins/tauri-plugin-turso/guest-js"]
+      "@tauri-apps/*": ["./src/shims/tauri.ts"],
+      "@fabianlars/tauri-plugin-oauth": ["./src/shims/tauri.ts"],
+      "@choochmeque/tauri-plugin-sharekit-api": ["./src/shims/tauri.ts"],
+      "tauri-plugin-device-info-api": ["./src/shims/tauri.ts"],
+      "tauri-plugin-turso": ["./src/shims/tauri.ts"]
     }
   },
   "include": [

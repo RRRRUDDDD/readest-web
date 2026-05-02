@@ -22,7 +22,6 @@ import { useBackgroundTexture } from '@/hooks/useBackgroundTexture';
 import { useAutoFocus } from '@/hooks/useAutoFocus';
 import { useTranslation } from '@/hooks/useTranslation';
 import { useEinkMode } from '@/hooks/useEinkMode';
-import { useKOSync } from '../hooks/useKOSync';
 import {
   applyFixedlayoutStyles,
   applyImageStyle,
@@ -55,13 +54,11 @@ import {
 } from '../utils/iframeEventHandlers';
 import { getMaxInlineSize } from '@/utils/config';
 import { getDirFromUILanguage } from '@/utils/rtl';
-import { isTauriAppPlatform } from '@/services/environment';
 import { TransformContext } from '@/services/transformers/types';
 import { transformContent } from '@/services/transformService';
 import { lockScreenOrientation } from '@/utils/bridge';
 import { useTextTranslation } from '../hooks/useTextTranslation';
 import { useBookCoverAutoSave } from '../hooks/useAutoSaveBookCover';
-import { useDiscordPresence } from '@/hooks/useDiscordPresence';
 import { manageSyntaxHighlighting } from '@/utils/highlightjs';
 import { getViewInsets } from '@/utils/insets';
 import { handleA11yNavigation } from '@/utils/a11y';
@@ -70,7 +67,6 @@ import { getLocale } from '@/utils/misc';
 import { isFontType } from '@/utils/font';
 import { ParagraphControl } from './paragraph';
 import Spinner from '@/components/Spinner';
-import KOSyncConflictResolver from './KOSyncResolver';
 import ImageViewer from './ImageViewer';
 import TableViewer from './TableViewer';
 
@@ -114,12 +110,6 @@ const FoliateViewer: React.FC<{
 
   useAutoFocus<HTMLDivElement>({ ref: containerRef });
 
-  useDiscordPresence(
-    bookData?.book || null,
-    !!viewState?.isPrimary,
-    settings.discordRichPresenceEnabled,
-  );
-
   useEffect(() => {
     const timer = setTimeout(() => setToastMessage(''), 2000);
     return () => clearTimeout(timer);
@@ -129,7 +119,6 @@ const FoliateViewer: React.FC<{
   useProgressSync(bookKey);
   useProgressAutoSave(bookKey);
   useBookCoverAutoSave(bookKey);
-  const { syncState, conflictDetails, resolveWithLocal, resolveWithRemote } = useKOSync(bookKey);
   useTextTranslation(bookKey, viewRef.current);
 
   const progressRelocateHandler = (event: Event) => {
@@ -267,11 +256,6 @@ const FoliateViewer: React.FC<{
         skipToNextSectionLabel: _('End of this section. Continue to the next.'),
       });
 
-      // Inline scripts in tauri platforms are not executed by default
-      if (viewSettings.allowScript && isTauriAppPlatform()) {
-        evalInlineScripts(detail.doc);
-      }
-
       // only call on load if we have highlighting turned on.
       if (viewSettings.codeHighlighting) {
         manageSyntaxHighlighting(detail.doc, viewSettings);
@@ -315,22 +299,6 @@ const FoliateViewer: React.FC<{
         detail.doc.addEventListener('touchend', handleTouchEnd.bind(null, bookKey));
         addLongPressListeners(bookKey, detail.doc);
       }
-    }
-  };
-
-  const evalInlineScripts = (doc: Document) => {
-    if (doc.defaultView && doc.defaultView.frameElement) {
-      const iframe = doc.defaultView.frameElement as HTMLIFrameElement;
-      const scripts = doc.querySelectorAll('script:not([src])');
-      scripts.forEach((script, index) => {
-        const scriptContent = script.textContent || script.innerHTML;
-        try {
-          console.warn('Evaluating inline scripts in iframe');
-          iframe.contentWindow?.eval(scriptContent);
-        } catch (error) {
-          console.error(`Error executing iframe script ${index + 1}:`, error);
-        }
-      });
     }
   };
 
@@ -785,14 +753,6 @@ const FoliateViewer: React.FC<{
         <div className='absolute left-0 top-0 z-10 flex h-full w-full items-center justify-center'>
           <Spinner loading={true} />
         </div>
-      )}
-      {syncState === 'conflict' && conflictDetails && (
-        <KOSyncConflictResolver
-          details={conflictDetails}
-          onResolveWithLocal={resolveWithLocal}
-          onResolveWithRemote={resolveWithRemote}
-          onClose={resolveWithLocal}
-        />
       )}
     </>
   );

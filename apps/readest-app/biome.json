@@ -17,7 +17,6 @@
       "!out/**",
       "!build/**",
       "!public/**",
-      "!src-tauri/**",
       "!next-env.d.ts",
       "!i18next-scanner.config.cjs"
     ],

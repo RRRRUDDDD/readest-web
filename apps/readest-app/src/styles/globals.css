@@ -55,6 +55,39 @@ body {
   cursor: default;
 }
 
+.route-loading-bar {
+  position: fixed;
+  top: 0;
+  left: 0;
+  z-index: 2147483647;
+  width: 100%;
+  height: 2px;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.route-loading-bar::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: -40%;
+  width: 40%;
+  background: hsl(var(--p));
+  box-shadow: 0 0 10px hsl(var(--p) / 0.55);
+  animation: route-loading-bar 1.1s ease-in-out infinite;
+}
+
+@keyframes route-loading-bar {
+  from {
+    transform: translateX(0);
+  }
+
+  to {
+    transform: translateX(350%);
+  }
+}
+
 @layer utilities {
   .text-balance {
     text-wrap: balance;

@@ -1,115 +1,115 @@
 import { describe, test, expect, beforeEach, vi } from 'vitest';
-
-vi.mock('@tauri-apps/api/window', () => ({
-  getCurrentWindow: vi.fn(),
-  getAllWindows: vi.fn(),
-}));
-
-vi.mock('@tauri-apps/api/event', () => ({
-  emitTo: vi.fn().mockResolvedValue(undefined),
-  TauriEvent: { WINDOW_FOCUS: 'tauri://focus' },
-}));
-
-vi.mock('@tauri-apps/plugin-process', () => ({
-  exit: vi.fn(),
-}));
-
-vi.mock('@tauri-apps/plugin-os', () => ({
-  type: vi.fn(),
-}));
+import {
+  getAlwaysOnTop,
+  getWindowLogicalPosition,
+  handleClose,
+  handleOnCloseWindow,
+  handleOnWindowFocus,
+  handleSetAlwaysOnTop,
+  handleToggleFullScreen,
+  quitApp,
+} from '@/utils/window';
+import { eventDispatcher } from '@/utils/event';
 
 vi.mock('@/utils/event', () => ({
   eventDispatcher: { dispatch: vi.fn() },
 }));
 
-import { getCurrentWindow } from '@tauri-apps/api/window';
-import { type as osType } from '@tauri-apps/plugin-os';
-import { tauriHandleOnCloseWindow } from '@/utils/window';
-
-type CloseHandler = (event: { preventDefault: () => void }) => Promise<void> | void;
-
-function makeWindow(label: string) {
-  let registered: CloseHandler | undefined;
-  const win = {
-    label,
-    destroy: vi.fn().mockResolvedValue(undefined),
-    hide: vi.fn().mockResolvedValue(undefined),
-    onCloseRequested: vi.fn().mockImplementation((handler: CloseHandler) => {
-      registered = handler;
-      return Promise.resolve(() => {});
-    }),
-  };
-  const trigger = async () => {
-    if (!registered) throw new Error('no handler registered');
-    await registered({ preventDefault: vi.fn() });
-  };
-  return { win, trigger };
-}
-
 beforeEach(() => {
   vi.clearAllMocks();
-  vi.useFakeTimers();
 });
 
-describe('tauriHandleOnCloseWindow', () => {
-  test('on macOS, leaves the main window alone — no book cleanup, no destroy', async () => {
-    // Rust hide-on-close handler hides the window; the user expects the active
-    // book to still be loaded when they bring the window back.
-    vi.mocked(osType).mockReturnValue('macos');
-    const { win, trigger } = makeWindow('main');
-    vi.mocked(getCurrentWindow).mockReturnValue(
-      win as unknown as ReturnType<typeof getCurrentWindow>,
-    );
+describe('web window helpers', () => {
+  test('getWindowLogicalPosition returns browser screen coordinates', async () => {
+    Object.defineProperty(window, 'screenX', { value: 12, configurable: true });
+    Object.defineProperty(window, 'screenY', { value: 34, configurable: true });
 
-    const callback = vi.fn();
-    await tauriHandleOnCloseWindow(callback);
-    await trigger();
-
-    expect(callback).not.toHaveBeenCalled();
-    expect(win.destroy).not.toHaveBeenCalled();
+    await expect(getWindowLogicalPosition()).resolves.toEqual({ x: 12, y: 34 });
   });
 
-  test('on Windows, destroys the main window', async () => {
-    vi.mocked(osType).mockReturnValue('windows');
-    const { win, trigger } = makeWindow('main');
-    vi.mocked(getCurrentWindow).mockReturnValue(
-      win as unknown as ReturnType<typeof getCurrentWindow>,
-    );
+  test('handleClose closes the browser window', async () => {
+    vi.spyOn(window, 'close').mockImplementation(() => {});
 
-    const callback = vi.fn();
-    await tauriHandleOnCloseWindow(callback);
-    await trigger();
+    await handleClose();
 
-    expect(win.destroy).toHaveBeenCalled();
+    expect(window.close).toHaveBeenCalled();
   });
 
-  test('on Linux, destroys the main window', async () => {
-    vi.mocked(osType).mockReturnValue('linux');
-    const { win, trigger } = makeWindow('main');
-    vi.mocked(getCurrentWindow).mockReturnValue(
-      win as unknown as ReturnType<typeof getCurrentWindow>,
-    );
-
+  test('handleOnCloseWindow registers a beforeunload listener', async () => {
     const callback = vi.fn();
-    await tauriHandleOnCloseWindow(callback);
-    await trigger();
+    const addSpy = vi.spyOn(window, 'addEventListener');
+    const removeSpy = vi.spyOn(window, 'removeEventListener');
 
-    expect(win.destroy).toHaveBeenCalled();
+    const cleanup = await handleOnCloseWindow(callback);
+    const handler = addSpy.mock.calls.find(([event]) => String(event) === 'beforeunload')?.[1] as
+      | (() => void)
+      | undefined;
+    expect(handler).toBeDefined();
+
+    handler?.();
+    expect(callback).toHaveBeenCalled();
+
+    cleanup();
+    expect(removeSpy).toHaveBeenCalledWith('beforeunload', handler);
   });
 
-  test('on macOS, dedicated reader windows still destroy after 300ms', async () => {
-    vi.mocked(osType).mockReturnValue('macos');
-    const { win, trigger } = makeWindow('reader-0');
-    vi.mocked(getCurrentWindow).mockReturnValue(
-      win as unknown as ReturnType<typeof getCurrentWindow>,
-    );
+  test('handleToggleFullScreen requests and exits fullscreen', async () => {
+    const requestFullscreen = vi.fn().mockResolvedValue(undefined);
+    const exitFullscreen = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(document, 'fullscreenElement', {
+      value: null,
+      configurable: true,
+    });
+    Object.defineProperty(document.documentElement, 'requestFullscreen', {
+      value: requestFullscreen,
+      configurable: true,
+    });
+    Object.defineProperty(document, 'exitFullscreen', {
+      value: exitFullscreen,
+      configurable: true,
+    });
 
+    await handleToggleFullScreen();
+    expect(requestFullscreen).toHaveBeenCalled();
+
+    Object.defineProperty(document, 'fullscreenElement', {
+      value: document.documentElement,
+      configurable: true,
+    });
+
+    await handleToggleFullScreen();
+    expect(exitFullscreen).toHaveBeenCalled();
+  });
+
+  test('always-on-top helpers are no-ops in the web build', async () => {
+    await expect(handleSetAlwaysOnTop(true)).resolves.toBeUndefined();
+    await expect(getAlwaysOnTop()).resolves.toBe(false);
+  });
+
+  test('handleOnWindowFocus registers a focus listener', async () => {
     const callback = vi.fn();
-    await tauriHandleOnCloseWindow(callback);
-    await trigger();
+    const addSpy = vi.spyOn(window, 'addEventListener');
+    const removeSpy = vi.spyOn(window, 'removeEventListener');
 
-    expect(win.destroy).not.toHaveBeenCalled();
-    vi.advanceTimersByTime(300);
-    expect(win.destroy).toHaveBeenCalled();
+    const cleanup = await handleOnWindowFocus(callback);
+    const handler = addSpy.mock.calls.find(([event]) => String(event) === 'focus')?.[1] as
+      | (() => void)
+      | undefined;
+    expect(handler).toBeDefined();
+
+    handler?.();
+    expect(callback).toHaveBeenCalled();
+
+    cleanup();
+    expect(removeSpy).toHaveBeenCalledWith('focus', handler);
+  });
+
+  test('quitApp dispatches quit event and closes the window', async () => {
+    vi.spyOn(window, 'close').mockImplementation(() => {});
+
+    await quitApp();
+
+    expect(eventDispatcher.dispatch).toHaveBeenCalledWith('quit-app');
+    expect(window.close).toHaveBeenCalled();
   });
 });

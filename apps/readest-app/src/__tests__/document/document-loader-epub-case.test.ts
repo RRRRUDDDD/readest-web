@@ -1,8 +1,10 @@
 import { describe, expect, it } from 'vitest';
 
 import { DocumentLoader } from '@/libs/document';
+import { configureZip } from '@/utils/zip';
 
 const createCaseMismatchEpub = async () => {
+  await configureZip();
   const { ZipWriter, BlobWriter, TextReader } = await import('@zip.js/zip.js');
   const writer = new ZipWriter(new BlobWriter('application/epub+zip'));
 
@@ -47,7 +49,9 @@ const createCaseMismatchEpub = async () => {
   );
 
   const blob = await writer.close();
-  return new File([blob], 'case-mismatch.epub', { type: 'application/epub+zip' });
+  return new File([await blob.arrayBuffer()], 'case-mismatch.epub', {
+    type: 'application/epub+zip',
+  });
 };
 
 describe('DocumentLoader EPUB zip lookup', () => {

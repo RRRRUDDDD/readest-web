@@ -12,20 +12,10 @@ import { useSidebarStore } from '@/store/sidebarStore';
 import { useGamepad } from '@/hooks/useGamepad';
 import { useTranslation } from '@/hooks/useTranslation';
 import { SystemSettings } from '@/types/settings';
-import { parseOpenWithFiles } from '@/helpers/openWith';
-import { getCurrentWindow } from '@tauri-apps/api/window';
-import { UnlistenFn } from '@tauri-apps/api/event';
-import { tauriHandleClose, tauriHandleOnCloseWindow } from '@/utils/window';
-import { isTauriAppPlatform } from '@/services/environment';
 import { uniqueId } from '@/utils/misc';
 import { throttle } from '@/utils/throttle';
 import { eventDispatcher } from '@/utils/event';
-import {
-  closeReaderWindowOrGoToLibrary,
-  ensureMainLibraryWindow,
-  navigateToLibrary,
-} from '@/utils/nav';
-import { clearDiscordPresence } from '@/utils/discord';
+import { closeReaderWindowOrGoToLibrary, navigateToLibrary } from '@/utils/nav';
 import { BOOK_IDS_SEPARATOR } from '@/services/constants';
 import { BookDetailModal } from '@/components/metadata';
 
@@ -41,7 +31,7 @@ const ReaderContent: React.FC<{ ids?: string; settings: SystemSettings }> = ({ i
   const _ = useTranslation();
   const router = useRouter();
   const searchParams = useSearchParams();
-  const { envConfig, appService } = useEnv();
+  const { envConfig } = useEnv();
   const { bookKeys, dismissBook, getNextBookKey } = useBooksManager();
   const { sideBarBookKey, setSideBarBookKey } = useSidebarStore();
   const { saveSettings } = useSettingsStore();
@@ -114,10 +104,6 @@ const ReaderContent: React.FC<{ ids?: string; settings: SystemSettings }> = ({ i
       }
     }
 
-    let unlistenOnCloseWindow: Promise<UnlistenFn>;
-    if (isTauriAppPlatform()) {
-      unlistenOnCloseWindow = tauriHandleOnCloseWindow(handleCloseBooks);
-    }
     window.addEventListener('beforeunload', handleCloseBooks);
     eventDispatcher.on('beforereload', handleCloseBooks);
     eventDispatcher.on('close-reader', handleCloseBooks);
@@ -127,7 +113,6 @@ const ReaderContent: React.FC<{ ids?: string; settings: SystemSettings }> = ({ i
       eventDispatcher.off('beforereload', handleCloseBooks);
       eventDispatcher.off('close-reader', handleCloseBooks);
       eventDispatcher.off('quit-app', handleCloseBooks);
-      unlistenOnCloseWindow?.then((fn) => fn());
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [bookKeys]);
@@ -139,18 +124,12 @@ const ReaderContent: React.FC<{ ids?: string; settings: SystemSettings }> = ({ i
     if (isPrimary && book && config) {
       const settings = useSettingsStore.getState().settings;
       eventDispatcher.dispatch('sync-book-progress', { bookKey });
-      eventDispatcher.dispatch('flush-kosync', { bookKey });
       await saveConfig(envConfig, bookKey, config, settings);
     }
   };
 
   const saveConfigAndCloseBook = async (bookKey: string) => {
     console.log('Closing book', bookKey);
-
-    const viewState = getViewState(bookKey);
-    if (viewState?.isPrimary && appService?.isDesktopApp) {
-      await clearDiscordPresence(appService);
-    }
 
     try {
       getView(bookKey)?.close();
@@ -180,19 +159,7 @@ const ReaderContent: React.FC<{ ids?: string; settings: SystemSettings }> = ({ i
 
   const handleCloseBooksToLibrary = async () => {
     handleCloseBooks();
-    if (isTauriAppPlatform()) {
-      const currentWindow = getCurrentWindow();
-      if (currentWindow.label === 'main') {
-        navigateBackToLibrary();
-      } else {
-        if (appService) {
-          await ensureMainLibraryWindow(appService);
-        }
-        currentWindow.close();
-      }
-    } else {
-      navigateBackToLibrary();
-    }
+    navigateBackToLibrary();
   };
 
   const handleCloseBook = async (bookKey: string) => {
@@ -202,17 +169,6 @@ const ReaderContent: React.FC<{ ids?: string; settings: SystemSettings }> = ({ i
     }
     dismissBook(bookKey);
     if (bookKeys.filter((key) => key !== bookKey).length == 0) {
-      const openWithFiles = (await parseOpenWithFiles(appService)) || [];
-      if (appService?.hasWindow) {
-        if (openWithFiles.length > 0) {
-          tauriHandleOnCloseWindow(handleCloseBooks);
-          return await tauriHandleClose();
-        }
-        const currentWindow = getCurrentWindow();
-        if (currentWindow.label.startsWith('reader')) {
-          return await currentWindow.close();
-        }
-      }
       saveSettingsAndGoToLibrary();
     }
   };

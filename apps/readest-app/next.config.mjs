@@ -7,22 +7,43 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 const isDev = process.env['NODE_ENV'] === 'development';
 const appPlatform = process.env['NEXT_PUBLIC_APP_PLATFORM'];
+const staticExport = process.env['NEXT_OUTPUT'] === 'export';
+const tauriShim = path.resolve(__dirname, 'src/shims/tauri.ts');
+const tauriAliases = {
+  '@tauri-apps/api/core': tauriShim,
+  '@tauri-apps/api/event': tauriShim,
+  '@tauri-apps/api/menu': tauriShim,
+  '@tauri-apps/api/path': tauriShim,
+  '@tauri-apps/api/webview': tauriShim,
+  '@tauri-apps/api/webviewWindow': tauriShim,
+  '@tauri-apps/api/window': tauriShim,
+  '@tauri-apps/plugin-cli': tauriShim,
+  '@tauri-apps/plugin-deep-link': tauriShim,
+  '@tauri-apps/plugin-dialog': tauriShim,
+  '@tauri-apps/plugin-fs': tauriShim,
+  '@tauri-apps/plugin-haptics': tauriShim,
+  '@tauri-apps/plugin-http': tauriShim,
+  '@tauri-apps/plugin-opener': tauriShim,
+  '@tauri-apps/plugin-os': tauriShim,
+  '@tauri-apps/plugin-process': tauriShim,
+  '@tauri-apps/plugin-shell': tauriShim,
+  '@tauri-apps/plugin-updater': tauriShim,
+  '@tauri-apps/plugin-websocket': tauriShim,
+  '@fabianlars/tauri-plugin-oauth': tauriShim,
+  '@choochmeque/tauri-plugin-sharekit-api': tauriShim,
+  'tauri-plugin-device-info-api': tauriShim,
+  'tauri-plugin-turso': tauriShim,
+};
 
 if (isDev) {
   const { initOpenNextCloudflareForDev } = await import('@opennextjs/cloudflare');
   initOpenNextCloudflareForDev();
 }
 
-const exportOutput = appPlatform !== 'web' && !isDev;
-
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  // Ensure Next.js uses SSG instead of SSR
-  // https://nextjs.org/docs/pages/building-your-application/deploying/static-exports
-  output: exportOutput ? 'export' : undefined,
-  pageExtensions: exportOutput ? ['jsx', 'tsx'] : ['js', 'jsx', 'ts', 'tsx'],
-  // Note: This feature is required to use the Next.js Image component in SSG mode.
-  // See https://nextjs.org/docs/messages/export-image-api for different workarounds.
+  output: staticExport ? 'export' : undefined,
+  pageExtensions: staticExport ? ['jsx', 'tsx'] : ['js', 'jsx', 'ts', 'tsx'],
   images: {
     unoptimized: true,
   },
@@ -40,6 +61,7 @@ const nextConfig = {
       // Without an alias, webpack walks up from that source location and
       // can't find fflate (only installed in this app's node_modules).
       fflate: path.resolve(__dirname, 'node_modules/fflate'),
+      ...tauriAliases,
       ...(appPlatform !== 'web' ? { '@tursodatabase/database-wasm': false } : {}),
     };
     return config;
@@ -50,6 +72,29 @@ const nextConfig = {
       // Turbopack rejects absolute paths in resolveAlias ("server relative
       // imports not implemented") — use a project-relative path.
       fflate: './node_modules/fflate',
+      '@tauri-apps/api/core': './src/shims/tauri.ts',
+      '@tauri-apps/api/event': './src/shims/tauri.ts',
+      '@tauri-apps/api/menu': './src/shims/tauri.ts',
+      '@tauri-apps/api/path': './src/shims/tauri.ts',
+      '@tauri-apps/api/webview': './src/shims/tauri.ts',
+      '@tauri-apps/api/webviewWindow': './src/shims/tauri.ts',
+      '@tauri-apps/api/window': './src/shims/tauri.ts',
+      '@tauri-apps/plugin-cli': './src/shims/tauri.ts',
+      '@tauri-apps/plugin-deep-link': './src/shims/tauri.ts',
+      '@tauri-apps/plugin-dialog': './src/shims/tauri.ts',
+      '@tauri-apps/plugin-fs': './src/shims/tauri.ts',
+      '@tauri-apps/plugin-haptics': './src/shims/tauri.ts',
+      '@tauri-apps/plugin-http': './src/shims/tauri.ts',
+      '@tauri-apps/plugin-opener': './src/shims/tauri.ts',
+      '@tauri-apps/plugin-os': './src/shims/tauri.ts',
+      '@tauri-apps/plugin-process': './src/shims/tauri.ts',
+      '@tauri-apps/plugin-shell': './src/shims/tauri.ts',
+      '@tauri-apps/plugin-updater': './src/shims/tauri.ts',
+      '@tauri-apps/plugin-websocket': './src/shims/tauri.ts',
+      '@fabianlars/tauri-plugin-oauth': './src/shims/tauri.ts',
+      '@choochmeque/tauri-plugin-sharekit-api': './src/shims/tauri.ts',
+      'tauri-plugin-device-info-api': './src/shims/tauri.ts',
+      'tauri-plugin-turso': './src/shims/tauri.ts',
       ...(appPlatform !== 'web' ? { '@tursodatabase/database-wasm': './src/utils/stub.ts' } : {}),
     },
   },
@@ -67,7 +112,6 @@ const nextConfig = {
           'i18next-browser-languagedetector',
           'react-i18next',
           'i18next',
-          '@tauri-apps',
           'highlight.js',
           'foliate-js',
           'marked',
@@ -78,10 +122,6 @@ const nextConfig = {
       {
         source: '/reader/:ids',
         destination: '/reader?ids=:ids',
-      },
-      {
-        source: '/o/book/:hash/annotation/:id',
-        destination: '/o?book=:hash&note=:id',
       },
     ];
   },

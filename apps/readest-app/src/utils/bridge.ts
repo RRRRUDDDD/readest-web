@@ -1,5 +1,3 @@
-import { invoke } from '@tauri-apps/api/core';
-
 export interface CopyURIRequest {
   uri: string;
   dst: string;
@@ -39,7 +37,7 @@ export interface GetStatusBarHeightResponse {
 }
 
 export interface GetSystemFontsListResponse {
-  fonts: Record<string, string>; // { fontName: fontFamily }
+  fonts: Record<string, string>;
   error?: string;
 }
 
@@ -66,12 +64,12 @@ export interface GetSafeAreaInsetsResponse {
 }
 
 interface GetScreenBrightnessResponse {
-  brightness: number; // 0.0 to 1.0
+  brightness: number;
   error?: string;
 }
 
 interface SetScreenBrightnessRequest {
-  brightness: number; // 0.0 to 1.0
+  brightness: number;
 }
 
 interface SetScreenBrightnessResponse {
@@ -96,121 +94,66 @@ export interface GetStorefrontRegionCodeResponse {
   error?: string;
 }
 
-export async function copyURIToPath(request: CopyURIRequest): Promise<CopyURIResponse> {
-  const result = await invoke<CopyURIResponse>('plugin:native-bridge|copy_uri_to_path', {
-    payload: request,
-  });
-
-  return result;
+export async function copyURIToPath(_request: CopyURIRequest): Promise<CopyURIResponse> {
+  return { success: false, error: 'Not supported in browser' };
 }
 
-export async function invokeUseBackgroundAudio(request: UseBackgroundAudioRequest): Promise<void> {
-  await invoke('plugin:native-bridge|use_background_audio', {
-    payload: request,
-  });
-}
+export async function invokeUseBackgroundAudio(
+  _request: UseBackgroundAudioRequest,
+): Promise<void> {}
 
 export async function installPackage(
-  request: InstallPackageRequest,
+  _request: InstallPackageRequest,
 ): Promise<InstallPackageResponse> {
-  const result = await invoke<InstallPackageResponse>('plugin:native-bridge|install_package', {
-    payload: request,
-  });
-  return result;
+  return { success: false, error: 'Not supported in browser' };
 }
 
 export async function setSystemUIVisibility(
-  request: SetSystemUIVisibilityRequest,
+  _request: SetSystemUIVisibilityRequest,
 ): Promise<SetSystemUIVisibilityResponse> {
-  const result = await invoke<SetSystemUIVisibilityResponse>(
-    'plugin:native-bridge|set_system_ui_visibility',
-    {
-      payload: request,
-    },
-  );
-  return result;
+  return { success: true };
 }
 
 export async function getStatusBarHeight(): Promise<GetStatusBarHeightResponse> {
-  const result = await invoke<GetStatusBarHeightResponse>(
-    'plugin:native-bridge|get_status_bar_height',
-  );
-  return result;
+  return { height: 0 };
 }
-
-let cachedSysFontsResult: GetSystemFontsListResponse | null = null;
 
 export async function getSysFontsList(): Promise<GetSystemFontsListResponse> {
-  if (cachedSysFontsResult) {
-    return cachedSysFontsResult;
-  }
-  const result = await invoke<GetSystemFontsListResponse>(
-    'plugin:native-bridge|get_sys_fonts_list',
-  );
-  cachedSysFontsResult = result;
-  return result;
+  return { fonts: {} };
 }
 
-export async function interceptKeys(request: InterceptKeysRequest): Promise<void> {
-  await invoke('plugin:native-bridge|intercept_keys', {
-    payload: request,
-  });
-}
+export async function interceptKeys(_request: InterceptKeysRequest): Promise<void> {}
 
-export async function lockScreenOrientation(request: LockScreenRequest): Promise<void> {
-  await invoke('plugin:native-bridge|lock_screen_orientation', {
-    payload: request,
-  });
-}
+export async function lockScreenOrientation(_request: LockScreenRequest): Promise<void> {}
 
 export async function getSystemColorScheme(): Promise<GetSystemColorSchemeResponse> {
-  const result = await invoke<GetSystemColorSchemeResponse>(
-    'plugin:native-bridge|get_system_color_scheme',
-  );
-  return result;
+  const darkMode =
+    typeof window !== 'undefined' && window.matchMedia('(prefers-color-scheme: dark)').matches;
+  return { colorScheme: darkMode ? 'dark' : 'light' };
 }
 
 export async function getSafeAreaInsets(): Promise<GetSafeAreaInsetsResponse> {
-  const result = await invoke<GetSafeAreaInsetsResponse>(
-    'plugin:native-bridge|get_safe_area_insets',
-  );
-  return result;
+  return { top: 0, right: 0, bottom: 0, left: 0 };
 }
 
 export async function getScreenBrightness(): Promise<GetScreenBrightnessResponse> {
-  const result = await invoke<GetScreenBrightnessResponse>(
-    'plugin:native-bridge|get_screen_brightness',
-  );
-  return result;
+  return { brightness: 1 };
 }
 
 export async function setScreenBrightness(
-  request: SetScreenBrightnessRequest,
+  _request: SetScreenBrightnessRequest,
 ): Promise<SetScreenBrightnessResponse> {
-  const result = await invoke<SetScreenBrightnessResponse>(
-    'plugin:native-bridge|set_screen_brightness',
-    {
-      payload: request,
-    },
-  );
-  return result;
+  return { success: true };
 }
 
 export async function getExternalSDCardPath(): Promise<GetExternalSDCardPathResponse> {
-  const result = await invoke<GetExternalSDCardPathResponse>(
-    'plugin:native-bridge|get_external_sdcard_path',
-  );
-  return result;
+  return { path: null };
 }
 
 export async function selectDirectory(): Promise<SelectDirectoryResponse> {
-  const result = await invoke<SelectDirectoryResponse>('plugin:native-bridge|select_directory');
-  return result;
+  return { cancelled: true };
 }
 
 export async function getStorefrontRegionCode(): Promise<GetStorefrontRegionCodeResponse> {
-  const result = await invoke<GetStorefrontRegionCodeResponse>(
-    'plugin:native-bridge|get_storefront_region_code',
-  );
-  return result;
+  return {};
 }

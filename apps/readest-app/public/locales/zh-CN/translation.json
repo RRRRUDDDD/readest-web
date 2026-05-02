@@ -149,6 +149,7 @@
   "Your password": "您的密码",
   "Sign in": "登录",
   "Signing in...": "正在登录...",
+  "Invalid username or password": "用户名或密码错误",
   "Sign in with {{provider}}": "使用 {{provider}} 登录",
   "Already have an account? Sign in": "已经有账号？登录",
   "Create a Password": "创建密码",

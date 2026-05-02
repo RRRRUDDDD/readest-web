@@ -60,8 +60,6 @@ function createMockOptions(
     toggleAutoUpload: vi.fn(),
     reloadPage: vi.fn(),
     toggleOpenLastBooks: vi.fn(),
-    showAbout: vi.fn(),
-    toggleTelemetry: vi.fn(),
     isDesktop: false,
     ...overrides,
   };
@@ -97,8 +95,6 @@ describe('buildCommandRegistry', () => {
     expect(actionIds).toContain('action.toggleTheme');
     expect(actionIds).toContain('action.fullscreen');
     expect(actionIds).toContain('action.reload');
-    expect(actionIds).toContain('action.about');
-    expect(actionIds).toContain('action.telemetry');
   });
 
   it('should use the provided translation function for localized labels', () => {
@@ -360,12 +356,12 @@ describe('getRecentCommands', () => {
 
   it('should return matching recent commands', () => {
     const items = buildCommandRegistry(createMockOptions());
-    localStorage.setItem('recentCommands', JSON.stringify(['action.reload', 'action.about']));
+    localStorage.setItem('recentCommands', JSON.stringify(['action.reload', 'action.toggleTheme']));
 
     const recent = getRecentCommands(items);
     expect(recent).toHaveLength(2);
     expect(recent[0]!.id).toBe('action.reload');
-    expect(recent[1]!.id).toBe('action.about');
+    expect(recent[1]!.id).toBe('action.toggleTheme');
   });
 
   it('should skip ids that do not exist in items', () => {
@@ -381,7 +377,7 @@ describe('getRecentCommands', () => {
     const items = buildCommandRegistry(createMockOptions());
     localStorage.setItem(
       'recentCommands',
-      JSON.stringify(['action.reload', 'action.about', 'action.toggleTheme']),
+      JSON.stringify(['action.reload', 'action.toggleTheme', 'action.autoUpload']),
     );
 
     const recent = getRecentCommands(items, 2);
@@ -451,12 +447,12 @@ describe('trackCommandUsage', () => {
   });
 
   it('should move existing command to front', () => {
-    localStorage.setItem('recentCommands', JSON.stringify(['action.about', 'action.reload']));
+    localStorage.setItem('recentCommands', JSON.stringify(['action.toggleTheme', 'action.reload']));
 
     trackCommandUsage('action.reload');
     const stored = JSON.parse(localStorage.getItem('recentCommands') ?? '[]') as string[];
     expect(stored[0]).toBe('action.reload');
-    expect(stored[1]).toBe('action.about');
+    expect(stored[1]).toBe('action.toggleTheme');
     // No duplicates
     expect(stored.filter((id) => id === 'action.reload')).toHaveLength(1);
   });

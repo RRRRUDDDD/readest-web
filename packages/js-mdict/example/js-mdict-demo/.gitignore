@@ -1,0 +1,4 @@
+node_modules
+resources/
+!resources/.gitkeep
+output.txt

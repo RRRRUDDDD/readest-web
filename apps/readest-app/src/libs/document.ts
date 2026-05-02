@@ -202,6 +202,10 @@ export class DocumentLoader {
     );
   }
 
+  private isEPUB(): boolean {
+    return this.file.type === 'application/epub+zip' || this.file.name.endsWith(`.${EXTS.EPUB}`);
+  }
+
   private isFB2(): boolean {
     return (
       this.file.type === 'application/x-fictionbook+xml' || this.file.name.endsWith(`.${EXTS.FB2}`)
@@ -224,7 +228,7 @@ export class DocumentLoader {
       throw new Error('File is empty');
     }
     try {
-      if (await this.isZip()) {
+      if ((await this.isZip()) || this.isEPUB()) {
         const loader = await this.makeZipLoader();
         const { entries } = loader;
 

@@ -5,7 +5,6 @@ import { Overlayer } from 'foliate-js/overlayer.js';
 import { TTSGranularity, TTSHighlightOptions, TTSMark, TTSVoice } from './types';
 import { createRejectFilter } from '@/utils/node';
 import { WebSpeechClient } from './WebSpeechClient';
-import { NativeTTSClient } from './NativeTTSClient';
 import { EdgeTTSClient } from './EdgeTTSClient';
 import { TTSUtils } from './TTSUtils';
 import { TTSClient } from './TTSClient';
@@ -41,10 +40,8 @@ export class TTSController extends EventTarget {
   ttsClient: TTSClient;
   ttsWebClient: TTSClient;
   ttsEdgeClient: TTSClient;
-  ttsNativeClient: TTSClient | null = null;
   ttsWebVoices: TTSVoice[] = [];
   ttsEdgeVoices: TTSVoice[] = [];
-  ttsNativeVoices: TTSVoice[] = [];
   ttsTargetLang: string = '';
 
   options: TTSHighlightOptions = { style: 'highlight', color: 'gray' };
@@ -59,10 +56,6 @@ export class TTSController extends EventTarget {
     super();
     this.ttsWebClient = new WebSpeechClient(this);
     this.ttsEdgeClient = new EdgeTTSClient(this, appService);
-    // TODO: implement native TTS client for iOS and PC
-    if (appService?.isAndroidApp) {
-      this.ttsNativeClient = new NativeTTSClient(this);
-    }
     this.ttsClient = this.ttsWebClient;
     this.appService = appService;
     this.view = view;
@@ -75,10 +68,6 @@ export class TTSController extends EventTarget {
     const availableClients = [];
     if (await this.ttsEdgeClient.init()) {
       availableClients.push(this.ttsEdgeClient);
-    }
-    if (this.ttsNativeClient && (await this.ttsNativeClient.init())) {
-      availableClients.push(this.ttsNativeClient);
-      this.ttsNativeVoices = await this.ttsNativeClient.getAllVoices();
     }
     if (await this.ttsWebClient.init()) {
       availableClients.push(this.ttsWebClient);
@@ -490,7 +479,6 @@ export class TTSController extends EventTarget {
   async setPrimaryLang(lang: string) {
     if (this.ttsEdgeClient.initialized) this.ttsEdgeClient.setPrimaryLang(lang);
     if (this.ttsWebClient.initialized) this.ttsWebClient.setPrimaryLang(lang);
-    if (this.ttsNativeClient?.initialized) this.ttsNativeClient?.setPrimaryLang(lang);
   }
 
   async setRate(rate: number) {
@@ -502,9 +490,7 @@ export class TTSController extends EventTarget {
   async getVoices(lang: string) {
     const ttsWebVoices = await this.ttsWebClient.getVoices(lang);
     const ttsEdgeVoices = await this.ttsEdgeClient.getVoices(lang);
-    const ttsNativeVoices = (await this.ttsNativeClient?.getVoices(lang)) ?? [];
-
-    const voicesGroups = [...ttsNativeVoices, ...ttsEdgeVoices, ...ttsWebVoices];
+    const voicesGroups = [...ttsEdgeVoices, ...ttsWebVoices];
     return voicesGroups;
   }
 
@@ -513,17 +499,8 @@ export class TTSController extends EventTarget {
     const useEdgeTTS = !!this.ttsEdgeVoices.find(
       (voice) => (voiceId === '' || voice.id === voiceId) && !voice.disabled,
     );
-    const useNativeTTS = !!this.ttsNativeVoices.find(
-      (voice) => (voiceId === '' || voice.id === voiceId) && !voice.disabled,
-    );
     if (useEdgeTTS) {
       this.ttsClient = this.ttsEdgeClient;
-      await this.ttsClient.setRate(this.ttsRate);
-    } else if (useNativeTTS) {
-      if (!this.ttsNativeClient) {
-        throw new Error('Native TTS client is not available');
-      }
-      this.ttsClient = this.ttsNativeClient;
       await this.ttsClient.setRate(this.ttsRate);
     } else {
       this.ttsClient = this.ttsWebClient;
@@ -582,9 +559,6 @@ export class TTSController extends EventTarget {
     }
     if (this.ttsEdgeClient.initialized) {
       await this.ttsEdgeClient.shutdown();
-    }
-    if (this.ttsNativeClient?.initialized) {
-      await this.ttsNativeClient.shutdown();
     }
   }
 }

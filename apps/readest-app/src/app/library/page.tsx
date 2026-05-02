@@ -16,12 +16,8 @@ import { eventDispatcher } from '@/utils/event';
 import { ProgressPayload } from '@/utils/transfer';
 import { throttle } from '@/utils/throttle';
 import { transferManager } from '@/services/transferManager';
-import { getDirPath, getFilename, joinPaths } from '@/utils/path';
-import { parseOpenWithFiles } from '@/helpers/openWith';
-import { isTauriAppPlatform, isWebAppPlatform } from '@/services/environment';
-import { checkForAppUpdates, checkAppReleaseNotes } from '@/helpers/updater';
-import { impactFeedback } from '@tauri-apps/plugin-haptics';
-import { getCurrentWebview } from '@tauri-apps/api/webview';
+import { getDirPath, getFilename } from '@/utils/path';
+import { isWebAppPlatform } from '@/services/environment';
 
 import { useEnv } from '@/context/EnvContext';
 import { useAuth } from '@/context/AuthContext';
@@ -39,32 +35,20 @@ import { useOPDSSubscriptions } from '@/hooks/useOPDSSubscriptions';
 import { useBookDataStore } from '@/store/bookDataStore';
 import { useTransferStore } from '@/store/transferStore';
 import { useScreenWakeLock } from '@/hooks/useScreenWakeLock';
-import { useOpenWithBooks } from '@/hooks/useOpenWithBooks';
-import { useOpenAnnotationLink } from '@/hooks/useOpenAnnotationLink';
 import { useKeyDownActions } from '@/hooks/useKeyDownActions';
 import { SelectedFile, useFileSelector } from '@/hooks/useFileSelector';
-import { lockScreenOrientation, selectDirectory } from '@/utils/bridge';
-import { requestStoragePermission } from '@/utils/permission';
-import { SUPPORTED_BOOK_EXTS } from '@/services/constants';
-import {
-  tauriHandleClose,
-  tauriHandleSetAlwaysOnTop,
-  tauriHandleToggleFullScreen,
-  tauriQuitApp,
-} from '@/utils/window';
+import { handleClose, handleToggleFullScreen, quitApp } from '@/utils/window';
 
 import { LibraryGroupByType } from '@/types/settings';
 import { BookMetadata } from '@/libs/document';
-import { AboutWindow } from '@/components/AboutWindow';
 import { KeyboardShortcutsHelp } from '@/components/KeyboardShortcutsHelp';
 import { BookDetailModal } from '@/components/metadata';
-import { UpdaterWindow } from '@/components/UpdaterWindow';
 import { CatalogDialog } from './components/OPDSDialog';
-import { MigrateDataWindow } from './components/MigrateDataWindow';
 import { BackupWindow } from './components/BackupWindow';
 import { useDragDropImport } from './hooks/useDragDropImport';
 import { useTransferQueue } from '@/hooks/useTransferQueue';
 import { useAppRouter } from '@/hooks/useAppRouter';
+import { parseOpenWithFiles } from '@/helpers/openWith';
 import { Toast } from '@/components/Toast';
 import {
   createBookGroups,
@@ -160,8 +144,6 @@ const LibraryPageContent = ({ searchParams }: { searchParams: ReadonlyURLSearchP
   useTheme({ systemUIVisible: true, appThemeColor: 'base-200' });
   useUICSS();
 
-  useOpenWithBooks();
-  useOpenAnnotationLink();
   useTransferQueue(libraryLoaded);
 
   const { pullLibrary, pushLibrary } = useBooksSync();
@@ -183,19 +165,13 @@ const LibraryPageContent = ({ searchParams }: { searchParams: ReadonlyURLSearchP
 
   useShortcuts({
     onToggleFullscreen: async () => {
-      if (isTauriAppPlatform()) {
-        await tauriHandleToggleFullScreen();
-      }
+      await handleToggleFullScreen();
     },
     onCloseWindow: async () => {
-      if (isTauriAppPlatform()) {
-        await tauriHandleClose();
-      }
+      await handleClose();
     },
     onQuitApp: async () => {
-      if (isTauriAppPlatform()) {
-        await tauriQuitApp();
-      }
+      await quitApp();
     },
     onOpenFontLayoutSettings: () => {
       setSettingsDialogOpen(true);
@@ -276,50 +252,6 @@ const LibraryPageContent = ({ searchParams }: { searchParams: ReadonlyURLSearchP
     onCancel: triggerBackUpOneGroupLevel,
     enabled: !!appService?.isAndroidApp && !!currentGroupPath,
   });
-
-  useEffect(() => {
-    const doCheckAppUpdates = async () => {
-      if (appService?.hasUpdater && settings.autoCheckUpdates) {
-        await checkForAppUpdates(_);
-      } else if (appService?.hasUpdater === false) {
-        checkAppReleaseNotes();
-      }
-    };
-    if (settings.alwaysOnTop) {
-      tauriHandleSetAlwaysOnTop(settings.alwaysOnTop);
-    }
-    doCheckAppUpdates();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [appService?.hasUpdater, settings]);
-
-  useEffect(() => {
-    if (appService?.isMobileApp) {
-      lockScreenOrientation({ orientation: 'auto' });
-    }
-  }, [appService]);
-
-  useEffect(() => {
-    if (appService?.hasWindow) {
-      const currentWebview = getCurrentWebview();
-      const unlisten = currentWebview.listen('close-reader-window', async () => {
-        // Reader windows are independent Tauri webviews with their own
-        // libraryStore instance — progress / readingStatus / move-to-front
-        // updates from the reader window do NOT propagate to this main
-        // window's store. Reload from disk so the library reflects the
-        // changes the reader just persisted.
-        const appService = await envConfig.getAppService();
-        const settings = await appService.loadSettings();
-        const library = await appService.loadLibraryBooks();
-        setSettings(settings);
-        setLibrary(library);
-      });
-      return () => {
-        unlisten.then((fn) => fn());
-      };
-    }
-    return;
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [appService, envConfig]);
 
   const handleImportBookFiles = useCallback(async (event: CustomEvent) => {
     const selectedFiles: SelectedFile[] = event.detail.files;
@@ -799,43 +731,21 @@ const LibraryPageContent = ({ searchParams }: { searchParams: ReadonlyURLSearchP
   };
 
   const handleImportBooksFromDirectory = async () => {
-    if (!appService || !isTauriAppPlatform()) return;
-
+    if (!appService) return;
     setIsSelectMode(false);
     console.log('Importing books from directory...');
-    let importDirectory: string | undefined = '';
-    if (appService.isAndroidApp) {
-      if (!(await requestStoragePermission())) return;
-      const response = await selectDirectory();
-      importDirectory = response.path;
-    } else {
-      const selectedDir = await appService.selectDirectory?.('read');
-      importDirectory = selectedDir;
-    }
-    if (!importDirectory) {
-      console.log('No directory selected');
-      return;
-    }
-    const files = await appService.readDirectory(importDirectory, 'None');
-    const supportedFiles = files.filter((file) => {
-      const ext = file.path.split('.').pop()?.toLowerCase() || '';
-      return SUPPORTED_BOOK_EXTS.includes(ext);
-    });
-    const toImportFiles = await Promise.all(
-      supportedFiles.map(async (file) => {
-        return {
-          path: await joinPaths(importDirectory, file.path),
-          basePath: importDirectory,
-        };
-      }),
-    );
-    importBooks(toImportFiles, undefined);
+    const directory = await appService.selectDirectory('read');
+    if (!directory) return;
+    const files = (await appService.readDirectory(directory, 'None')).map((file) => ({
+      path: file.path,
+      basePath: directory,
+    }));
+    if (files.length === 0) return;
+    const groupId = searchParams?.get('group') || '';
+    await importBooks(files, groupId);
   };
 
   const handleSetSelectMode = (selectMode: boolean) => {
-    if (selectMode && appService?.hasHaptics) {
-      impactFeedback('medium');
-    }
     setIsSelectMode(selectMode);
     setIsSelectAll(false);
     setIsSelectNone(false);
@@ -1022,10 +932,7 @@ const LibraryPageContent = ({ searchParams }: { searchParams: ReadonlyURLSearchP
           <TransferQueuePanel />
         </ModalPortal>
       )}
-      <AboutWindow />
       <KeyboardShortcutsHelp />
-      <UpdaterWindow />
-      <MigrateDataWindow />
       <BackupWindow onPullLibrary={pullLibrary} />
       {isSettingsDialogOpen && <SettingsDialog bookKey={''} />}
       {showCatalogManager && <CatalogDialog onClose={handleDismissOPDSDialog} />}

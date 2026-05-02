@@ -24,7 +24,7 @@ import { eventDispatcher } from '@/utils/event';
 import { getMaxInlineSize } from '@/utils/config';
 import { formatLocaleDateTime } from '@/utils/book';
 import { saveViewSettings } from '@/helpers/settings';
-import { tauriHandleToggleFullScreen } from '@/utils/window';
+import { handleToggleFullScreen } from '@/utils/window';
 import MenuItem from '@/components/MenuItem';
 import Menu from '@/components/Menu';
 
@@ -87,7 +87,7 @@ const ViewMenu: React.FC<ViewMenuProps> = ({
   };
 
   const handleFullScreen = () => {
-    tauriHandleToggleFullScreen();
+    handleToggleFullScreen();
     setIsDropdownOpen?.(false);
   };
 

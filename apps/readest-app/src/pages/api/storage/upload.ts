@@ -1,11 +1,7 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
 import { createSupabaseAdminClient } from '@/utils/supabase';
 import { corsAllMethods, runMiddleware } from '@/utils/cors';
-import {
-  getStoragePlanData,
-  validateUserAndToken,
-  STORAGE_QUOTA_GRACE_BYTES,
-} from '@/utils/access';
+import { validateUserAndToken } from '@/utils/access';
 import { getDownloadSignedUrl, getUploadSignedUrl } from '@/utils/object';
 import { READEST_PUBLIC_STORAGE_BASE_URL } from '@/services/constants';
 
@@ -49,11 +45,6 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       return res.status(400).json({ error: 'Missing file info' });
     }
 
-    const { usage, quota } = getStoragePlanData(token);
-    if (usage + fileSize > quota + STORAGE_QUOTA_GRACE_BYTES) {
-      return res.status(403).json({ error: 'Insufficient storage quota', usage });
-    }
-
     const fileKey = `${user.id}/${fileName}`;
     const supabase = createSupabaseAdminClient();
     const { data: existingRecord, error: fetchError } = await supabase
@@ -93,8 +84,6 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       res.status(200).json({
         uploadUrl,
         fileKey,
-        usage: usage + fileSize,
-        quota,
       });
     } catch (error) {
       console.error('Error creating presigned post:', error);

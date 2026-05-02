@@ -1,8 +1,6 @@
 import { create } from 'zustand';
 import { AppService } from '@/types/system';
 import { getThemeCode, ThemeCode } from '@/utils/style';
-import { getSystemColorScheme } from '@/utils/bridge';
-import { getCurrentWindow } from '@tauri-apps/api/window';
 import { CustomTheme, Palette, ThemeMode } from '@/styles/themes';
 import { EnvConfigType, isWebAppPlatform } from '@/services/environment';
 import { SystemSettings } from '@/types/settings';
@@ -167,13 +165,7 @@ export const initSystemThemeListener = (appService: AppService) => {
 
   const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
   const updateColorTheme = async () => {
-    let systemIsDarkMode;
-    if (appService.isIOSApp) {
-      const res = await getSystemColorScheme();
-      systemIsDarkMode = res.colorScheme === 'dark';
-    } else {
-      systemIsDarkMode = mediaQuery.matches;
-    }
+    const systemIsDarkMode = mediaQuery.matches;
     if (typeof window !== 'undefined' && localStorage) {
       localStorage.setItem('systemIsDarkMode', systemIsDarkMode ? 'true' : 'false');
     }
@@ -181,11 +173,7 @@ export const initSystemThemeListener = (appService: AppService) => {
   };
 
   const updateWindowTheme = async () => {
-    if (!appService.hasWindow || !appService.isLinuxApp) return;
-    const currentWindow = getCurrentWindow();
-    const isFullscreen = await currentWindow.isFullscreen();
-    const isMaximized = await currentWindow.isMaximized();
-    useThemeStore.setState({ isRoundedWindow: !isMaximized && !isFullscreen });
+    useThemeStore.setState({ isRoundedWindow: true });
   };
 
   mediaQuery?.addEventListener('change', updateColorTheme);

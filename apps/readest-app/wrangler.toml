@@ -1,42 +1,34 @@
 name = "readest-web"
 main = ".open-next/worker.js"
 compatibility_date = "2026-04-10"
-compatibility_flags = ["nodejs_compat"]
-workers_dev = true
-preview_urls = true
-
-[[routes]]
-pattern = "web-cf.readest.com"
-zone_name = "readest.com"
-custom_domain = true
-
-[[routes]]
-pattern = "api-cf.readest.com"
-zone_name = "readest.com"
-custom_domain = true
-
-[[routes]]
-pattern = "web.readest.com"
-zone_name = "readest.com"
-custom_domain = true
-
-[vars]
-PNPM_VERSION = "10.28.1"
-
-[observability]
-enabled = true
-head_sampling_rate = 0.01
-logs = { head_sampling_rate = 0.01 }
-traces = { head_sampling_rate = 0.01 }
+compatibility_flags = ["nodejs_compat", "global_fetch_strictly_public"]
 
 [assets]
 directory = ".open-next/assets"
 binding = "ASSETS"
 
+[vars]
+PNPM_VERSION = "10.33.0"
+NEXT_PUBLIC_SUPABASE_URL = "https://cdnvrfnbqgnybmzffdlq.supabase.co"
+NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY = "sb_publishable_mAD4CIrx-QQJUbYq5LMBUg_mAkVpSXI"
+NEXT_PUBLIC_API_BASE_URL = "https://readest-web.pages.dev"
+STORAGE_FIXED_QUOTA = "5368709120"
+
 [[kv_namespaces]]
 binding = "TRANSLATIONS_KV"
-id = "fa6e3eb1988a424bbf3c952e01650ced"
+id = "9e205a6f843f4cd1981f480255690510"
 
 [[r2_buckets]]
 binding = "NEXT_INC_CACHE_R2_BUCKET"
 bucket_name = "readest-next-inc-cache"
+
+[[r2_buckets]]
+binding = "READEST_FILES_R2_BUCKET"
+bucket_name = "readest-files"
+
+[[services]]
+binding = "WORKER_SELF_REFERENCE"
+service = "readest-web"
+
+[images]
+binding = "IMAGES"

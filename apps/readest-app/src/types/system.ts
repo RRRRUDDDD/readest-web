@@ -135,12 +135,13 @@ export interface AppService {
   importBook(file: string | File, books: Book[], options?: ImportBookOptions): Promise<Book | null>;
   refreshBookMetadata(book: Book): Promise<boolean>;
   deleteBook(book: Book, deleteAction: DeleteAction): Promise<void>;
-  uploadBook(book: Book, onProgress?: ProgressHandler): Promise<void>;
+  uploadBook(book: Book, onProgress?: ProgressHandler, signal?: AbortSignal): Promise<void>;
   downloadBook(
     book: Book,
     onlyCover?: boolean,
     redownload?: boolean,
     onProgress?: ProgressHandler,
+    signal?: AbortSignal,
   ): Promise<void>;
   uploadFileToCloud(
     lfp: string,
@@ -149,6 +150,7 @@ export interface AppService {
     handleProgress: ProgressHandler,
     hash: string,
     temp?: boolean,
+    signal?: AbortSignal,
   ): Promise<string | undefined>;
   downloadBookCovers(books: Book[], redownload?: boolean): Promise<void>;
   exportBook(book: Book): Promise<boolean>;

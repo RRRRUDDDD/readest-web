@@ -34,7 +34,7 @@ import * as Settings from './settingsService';
 
 export abstract class BaseAppService implements AppService {
   osPlatform: OsPlatform = getOSPlatform();
-  appPlatform: AppPlatform = 'tauri';
+  appPlatform: AppPlatform = 'web';
   localBooksDir = '';
   isMobile = false;
   isMacOSApp = false;
@@ -253,6 +253,7 @@ export abstract class BaseAppService implements AppService {
     handleProgress: ProgressHandler,
     hash: string,
     temp: boolean = false,
+    signal?: AbortSignal,
   ) {
     return CloudSvc.uploadFileToCloud(
       this.fs,
@@ -263,11 +264,12 @@ export abstract class BaseAppService implements AppService {
       handleProgress,
       hash,
       temp,
+      signal,
     );
   }
 
-  async uploadBook(book: Book, onProgress?: ProgressHandler): Promise<void> {
-    return CloudSvc.uploadBook(this.fs, this.resolveFilePath.bind(this), book, onProgress);
+  async uploadBook(book: Book, onProgress?: ProgressHandler, signal?: AbortSignal): Promise<void> {
+    return CloudSvc.uploadBook(this.fs, this.resolveFilePath.bind(this), book, onProgress, signal);
   }
 
   async downloadCloudFile(lfp: string, cfp: string, onProgress: ProgressHandler) {
@@ -283,6 +285,7 @@ export abstract class BaseAppService implements AppService {
     onlyCover = false,
     redownload = false,
     onProgress?: ProgressHandler,
+    signal?: AbortSignal,
   ): Promise<void> {
     return CloudSvc.downloadBook(
       this,
@@ -292,6 +295,7 @@ export abstract class BaseAppService implements AppService {
       onlyCover,
       redownload,
       onProgress,
+      signal,
     );
   }
 

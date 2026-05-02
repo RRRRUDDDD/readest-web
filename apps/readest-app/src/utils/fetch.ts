@@ -23,7 +23,12 @@ export const fetchWithAuth = async (url: string, options: RequestInit) => {
   const response = await fetch(url, { ...options, headers });
 
   if (!response.ok) {
-    const errorData = await response.json();
+    let errorData: { error?: string } = {};
+    try {
+      errorData = await response.json();
+    } catch {
+      errorData = { error: response.statusText };
+    }
     console.error('Error:', errorData.error || response.statusText);
     throw new Error(errorData.error || 'Request failed');
   }

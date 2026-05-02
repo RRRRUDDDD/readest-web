@@ -19,7 +19,7 @@ import {
   isBookIndexed,
   aiStore,
   aiLogger,
-  createTauriAdapter,
+  createChatAdapter,
   getLastSources,
   clearLastSources,
 } from '@/services/ai';
@@ -114,7 +114,7 @@ const AIAssistantChat = ({
   // create adapter ONCE and keep it stable
   const adapter = useMemo(() => {
     // eslint-disable-next-line react-hooks/refs -- intentional: we read optionsRef inside a deferred callback, not during render
-    return createTauriAdapter(() => optionsRef.current);
+    return createChatAdapter(() => optionsRef.current);
   }, []);
 
   // Create history adapter to load/persist messages
@@ -171,7 +171,7 @@ const AIAssistantWithRuntime = ({
   isLoadingHistory,
   hasActiveConversation,
 }: {
-  adapter: NonNullable<ReturnType<typeof createTauriAdapter>>;
+  adapter: NonNullable<ReturnType<typeof createChatAdapter>>;
   historyAdapter?: ThreadHistoryAdapter;
   onResetIndex: () => void;
   isLoadingHistory: boolean;

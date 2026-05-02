@@ -1,28 +1,8 @@
 import { describe, test, expect, beforeEach, vi } from 'vitest';
 
-// ── Module mocks ─────────────────────────────────────────────────────
 vi.mock('next/navigation', () => ({
   useRouter: vi.fn(),
   redirect: vi.fn(),
-}));
-
-vi.mock('@tauri-apps/api/window', () => ({
-  getCurrentWindow: vi.fn().mockReturnValue({ label: 'main', close: vi.fn() }),
-}));
-
-vi.mock('@tauri-apps/api/webviewWindow', () => {
-  const mockOnce = vi.fn();
-  const ctor = vi.fn().mockImplementation(function (this: Record<string, unknown>) {
-    this['once'] = mockOnce;
-  }) as unknown as { getByLabel: ReturnType<typeof vi.fn> };
-  ctor.getByLabel = vi.fn();
-  return { WebviewWindow: ctor };
-});
-
-vi.mock('@/services/environment', () => ({
-  isPWA: vi.fn().mockReturnValue(false),
-  isWebAppPlatform: vi.fn().mockReturnValue(false),
-  isTauriAppPlatform: vi.fn().mockReturnValue(false),
 }));
 
 vi.mock('@/services/constants', () => ({
@@ -30,9 +10,6 @@ vi.mock('@/services/constants', () => ({
 }));
 
 import { redirect } from 'next/navigation';
-import { getCurrentWindow } from '@tauri-apps/api/window';
-import { WebviewWindow } from '@tauri-apps/api/webviewWindow';
-import { isPWA, isTauriAppPlatform, isWebAppPlatform } from '@/services/environment';
 import {
   navigateToReader,
   navigateToLogin,
@@ -47,9 +24,6 @@ import {
   closeReaderWindowOrGoToLibrary,
 } from '@/utils/nav';
 
-const WebviewWindowCtor = WebviewWindow as unknown as { getByLabel: ReturnType<typeof vi.fn> };
-
-// ── Helpers ──────────────────────────────────────────────────────────
 function mockRouter() {
   return {
     push: vi.fn(),
@@ -61,118 +35,71 @@ function mockRouter() {
   };
 }
 
-function makeAppService(isMacOS = false) {
-  return { isMacOSApp: isMacOS } as Record<string, unknown>;
-}
-
 beforeEach(() => {
   vi.clearAllMocks();
-
-  // Reset default environment mock returns
-  vi.mocked(isWebAppPlatform).mockReturnValue(false);
-  vi.mocked(isPWA).mockReturnValue(false);
-  vi.mocked(isTauriAppPlatform).mockReturnValue(false);
-
-  // Reset getCurrentWindow default
-  vi.mocked(getCurrentWindow).mockReturnValue({
-    label: 'main',
-    close: vi.fn(),
-  } as unknown as ReturnType<typeof getCurrentWindow>);
-
-  // Reset window.location
   Object.defineProperty(window, 'location', {
     value: { pathname: '/library', search: '?q=test' },
     writable: true,
   });
-
-  // Reset sessionStorage
+  vi.spyOn(window, 'open').mockImplementation(() => null);
   sessionStorage.clear();
 });
 
-// ── Tests ────────────────────────────────────────────────────────────
 describe('navigateToReader', () => {
-  test('navigates to /reader with ids param for non-web platform', () => {
+  test('uses query-param reader URLs for the web app', () => {
     const router = mockRouter();
     navigateToReader(router, ['book1', 'book2']);
 
-    expect(router.push).toHaveBeenCalledTimes(1);
-    const url = router.push.mock.calls[0]![0] as string;
-    expect(url).toContain('/reader?');
-    expect(url).toContain('ids=book1%2Bbook2');
+    expect(router.push).toHaveBeenCalledWith('/reader?ids=book1%2Bbook2', undefined);
   });
 
-  test('navigates to /reader/id for web platform (non-PWA)', () => {
-    vi.mocked(isWebAppPlatform).mockReturnValue(true);
-    vi.mocked(isPWA).mockReturnValue(false);
-
-    const router = mockRouter();
-    navigateToReader(router, ['book1']);
-
-    const url = router.push.mock.calls[0]![0] as string;
-    expect(url).toBe('/reader/book1');
-  });
-
-  test('web platform with PWA uses query param format', () => {
-    vi.mocked(isWebAppPlatform).mockReturnValue(true);
-    vi.mocked(isPWA).mockReturnValue(true);
-
-    const router = mockRouter();
-    navigateToReader(router, ['book1']);
-
-    const url = router.push.mock.calls[0]![0] as string;
-    expect(url).toContain('/reader?');
-    expect(url).toContain('ids=book1');
-  });
-
-  test('joins multiple book IDs with + separator', () => {
-    const router = mockRouter();
-    navigateToReader(router, ['a', 'b', 'c']);
-
-    const url = router.push.mock.calls[0]![0] as string;
-    expect(url).toContain('ids=a%2Bb%2Bc');
-  });
-
-  test('appends additional query params for non-web platform', () => {
+  test('appends additional query params', () => {
     const router = mockRouter();
     navigateToReader(router, ['book1'], 'view=scroll');
 
-    const url = router.push.mock.calls[0]![0] as string;
-    expect(url).toContain('view=scroll');
-    expect(url).toContain('ids=book1');
-  });
-
-  test('appends additional query params for web platform', () => {
-    vi.mocked(isWebAppPlatform).mockReturnValue(true);
-    vi.mocked(isPWA).mockReturnValue(false);
-
-    const router = mockRouter();
-    navigateToReader(router, ['book1'], 'view=scroll');
-
-    const url = router.push.mock.calls[0]![0] as string;
-    expect(url).toBe('/reader/book1?view=scroll');
+    expect(router.push).toHaveBeenCalledWith('/reader?view=scroll&ids=book1', undefined);
   });
 
   test('passes navOptions through', () => {
     const router = mockRouter();
     navigateToReader(router, ['book1'], undefined, { scroll: false });
 
-    expect(router.push).toHaveBeenCalledWith(expect.stringContaining('/reader'), { scroll: false });
+    expect(router.push).toHaveBeenCalledWith('/reader?ids=book1', { scroll: false });
+  });
+});
+
+describe('window helpers', () => {
+  test('showReaderWindow opens a new browser tab', () => {
+    showReaderWindow({} as never, ['book1', 'book2']);
+
+    expect(window.open).toHaveBeenCalledWith(
+      '/reader?ids=book1%2Bbook2',
+      '_blank',
+      'noopener,noreferrer',
+    );
+  });
+
+  test('showLibraryWindow opens a library tab with file params', () => {
+    showLibraryWindow({} as never, ['file1.epub', 'file2.epub']);
+
+    expect(window.open).toHaveBeenCalledWith(
+      '/library?file=file1.epub&file=file2.epub',
+      '_blank',
+      'noopener,noreferrer',
+    );
+  });
+
+  test('ensureMainLibraryWindow is a no-op in the web build', async () => {
+    await expect(ensureMainLibraryWindow({} as never)).resolves.toBeUndefined();
   });
 });
 
 describe('navigateToLogin', () => {
   test('navigates to /auth with redirect from current path', () => {
-    Object.defineProperty(window, 'location', {
-      value: { pathname: '/library', search: '?q=test' },
-      writable: true,
-    });
-
     const router = mockRouter();
     navigateToLogin(router);
 
-    const url = router.push.mock.calls[0]![0] as string;
-    expect(url).toContain('/auth?redirect=');
-    expect(url).toContain(encodeURIComponent('/library?q=test'));
+    expect(router.push).toHaveBeenCalledWith('/auth?redirect=%2Flibrary%3Fq%3Dtest');
   });
 
   test('uses / as redirect when already on /auth', () => {
@@ -184,8 +111,7 @@ describe('navigateToLogin', () => {
     const router = mockRouter();
     navigateToLogin(router);
 
-    const url = router.push.mock.calls[0]![0] as string;
-    expect(url).toBe('/auth?redirect=%2F');
+    expect(router.push).toHaveBeenCalledWith('/auth?redirect=%2F');
   });
 });
 
@@ -228,22 +154,23 @@ describe('navigateToLibrary', () => {
 
     expect(router.replace).toHaveBeenCalledWith('/library?sort=author&view=list', undefined);
   });
+});
 
-  test('ignores lastLibraryParams when navBack=false', () => {
+describe('closeReaderWindowOrGoToLibrary', () => {
+  test('navigates the current web view to the library', async () => {
+    const router = mockRouter();
+    await closeReaderWindowOrGoToLibrary({} as never, router);
+
+    expect(router.replace).toHaveBeenCalledWith('/library', undefined);
+  });
+
+  test('uses saved library params when navigating back', async () => {
     sessionStorage.setItem('lastLibraryParams', 'sort=author');
 
     const router = mockRouter();
-    navigateToLibrary(router, 'sort=title', undefined, false);
+    await closeReaderWindowOrGoToLibrary(null, router);
 
-    expect(router.replace).toHaveBeenCalledWith('/library?sort=title', undefined);
-  });
-
-  test('falls back when lastLibraryParams is null and navBack=true', () => {
-    const router = mockRouter();
-    navigateToLibrary(router, 'sort=date', undefined, true);
-
-    // Should still use the provided queryParams since sessionStorage has nothing
-    expect(router.replace).toHaveBeenCalledWith('/library?sort=date', undefined);
+    expect(router.replace).toHaveBeenCalledWith('/library?sort=author', undefined);
   });
 });
 
@@ -254,8 +181,8 @@ describe('redirectToLibrary', () => {
   });
 });
 
-describe('navigateToResetPassword', () => {
-  test('navigates to /auth/recovery with redirect', () => {
+describe('password navigation', () => {
+  test('navigateToResetPassword preserves redirect', () => {
     Object.defineProperty(window, 'location', {
       value: { pathname: '/settings', search: '' },
       writable: true,
@@ -264,27 +191,10 @@ describe('navigateToResetPassword', () => {
     const router = mockRouter();
     navigateToResetPassword(router);
 
-    const url = router.push.mock.calls[0]![0] as string;
-    expect(url).toContain('/auth/recovery?redirect=');
-    expect(url).toContain(encodeURIComponent('/settings'));
+    expect(router.push).toHaveBeenCalledWith('/auth/recovery?redirect=%2Fsettings');
   });
 
-  test('uses / as redirect when on /auth', () => {
-    Object.defineProperty(window, 'location', {
-      value: { pathname: '/auth', search: '' },
-      writable: true,
-    });
-
-    const router = mockRouter();
-    navigateToResetPassword(router);
-
-    const url = router.push.mock.calls[0]![0] as string;
-    expect(url).toBe('/auth/recovery?redirect=%2F');
-  });
-});
-
-describe('navigateToUpdatePassword', () => {
-  test('navigates to /auth/update with redirect', () => {
+  test('navigateToUpdatePassword preserves redirect', () => {
     Object.defineProperty(window, 'location', {
       value: { pathname: '/user', search: '?tab=security' },
       writable: true,
@@ -293,174 +203,6 @@ describe('navigateToUpdatePassword', () => {
     const router = mockRouter();
     navigateToUpdatePassword(router);
 
-    const url = router.push.mock.calls[0]![0] as string;
-    expect(url).toContain('/auth/update?redirect=');
-    expect(url).toContain(encodeURIComponent('/user?tab=security'));
-  });
-
-  test('uses / as redirect when on /auth', () => {
-    Object.defineProperty(window, 'location', {
-      value: { pathname: '/auth', search: '' },
-      writable: true,
-    });
-
-    const router = mockRouter();
-    navigateToUpdatePassword(router);
-
-    const url = router.push.mock.calls[0]![0] as string;
-    expect(url).toBe('/auth/update?redirect=%2F');
-  });
-});
-
-describe('showReaderWindow', () => {
-  test('creates a new WebviewWindow with correct URL', () => {
-    const appService = makeAppService();
-    showReaderWindow(appService as never, ['book1', 'book2']);
-
-    expect(WebviewWindow).toHaveBeenCalled();
-    const constructorCall = vi.mocked(WebviewWindow).mock.calls[0]!;
-    const url = constructorCall[1]!.url as string;
-    expect(url).toContain('/reader?');
-    expect(url).toContain('ids=book1%2Bbook2');
-  });
-
-  test('uses macOS-specific window options', () => {
-    const appService = makeAppService(true);
-    showReaderWindow(appService as never, ['book1']);
-
-    const constructorCall = vi.mocked(WebviewWindow).mock.calls[0]!;
-    const options = constructorCall[1]!;
-    expect(options.title).toBe('');
-    expect(options.decorations).toBe(true);
-    expect(options.titleBarStyle).toBe('overlay');
-  });
-
-  test('uses non-macOS window options', () => {
-    const appService = makeAppService(false);
-    showReaderWindow(appService as never, ['book1']);
-
-    const constructorCall = vi.mocked(WebviewWindow).mock.calls[0]!;
-    const options = constructorCall[1]!;
-    expect(options.title).toBe('Readest');
-    expect(options.decorations).toBe(false);
-    expect(options.transparent).toBe(true);
-    expect(options.shadow).toBe(true);
-  });
-});
-
-describe('showLibraryWindow', () => {
-  test('creates a new WebviewWindow with file params', () => {
-    const appService = makeAppService();
-    showLibraryWindow(appService as never, ['file1.epub', 'file2.epub']);
-
-    expect(WebviewWindow).toHaveBeenCalled();
-    const constructorCall = vi.mocked(WebviewWindow).mock.calls[0]!;
-    const url = constructorCall[1]!.url as string;
-    expect(url).toContain('/library?');
-    expect(url).toContain('file=file1.epub');
-    expect(url).toContain('file=file2.epub');
-  });
-});
-
-describe('ensureMainLibraryWindow', () => {
-  test('shows and focuses the existing main window when present', async () => {
-    const main = {
-      show: vi.fn().mockResolvedValue(undefined),
-      unminimize: vi.fn().mockResolvedValue(undefined),
-      setFocus: vi.fn().mockResolvedValue(undefined),
-    };
-    WebviewWindowCtor.getByLabel.mockResolvedValue(main);
-
-    await ensureMainLibraryWindow(makeAppService() as never);
-
-    expect(WebviewWindowCtor.getByLabel).toHaveBeenCalledWith('main');
-    expect(main.show).toHaveBeenCalled();
-    expect(main.unminimize).toHaveBeenCalled();
-    expect(main.setFocus).toHaveBeenCalled();
-    expect(WebviewWindow).not.toHaveBeenCalled();
-  });
-
-  test('creates a new main-labelled window pointing at /library when missing', async () => {
-    WebviewWindowCtor.getByLabel.mockResolvedValue(null);
-
-    await ensureMainLibraryWindow(makeAppService() as never);
-
-    expect(WebviewWindow).toHaveBeenCalledTimes(1);
-    const [label, options] = vi.mocked(WebviewWindow).mock.calls[0]!;
-    expect(label).toBe('main');
-    expect((options as { url: string }).url).toBe('/library');
-  });
-});
-
-describe('closeReaderWindowOrGoToLibrary', () => {
-  function makeAppServiceWithWindow(hasWindow = true) {
-    return { isMacOSApp: false, hasWindow } as Record<string, unknown>;
-  }
-
-  test('on web platform, navigates current view to /library', async () => {
-    vi.mocked(isTauriAppPlatform).mockReturnValue(false);
-
-    const router = mockRouter();
-    await closeReaderWindowOrGoToLibrary(makeAppServiceWithWindow() as never, router);
-
-    expect(router.replace).toHaveBeenCalledWith('/library', undefined);
-    expect(WebviewWindowCtor.getByLabel).not.toHaveBeenCalled();
-  });
-
-  test('in Tauri main window, navigates the same window to /library', async () => {
-    vi.mocked(isTauriAppPlatform).mockReturnValue(true);
-    const close = vi.fn();
-    vi.mocked(getCurrentWindow).mockReturnValue({
-      label: 'main',
-      close,
-    } as unknown as ReturnType<typeof getCurrentWindow>);
-
-    const router = mockRouter();
-    await closeReaderWindowOrGoToLibrary(makeAppServiceWithWindow() as never, router);
-
-    expect(close).not.toHaveBeenCalled();
-    expect(router.replace).toHaveBeenCalledWith('/library', undefined);
-  });
-
-  test('in dedicated reader window, ensures main library window and closes self', async () => {
-    vi.mocked(isTauriAppPlatform).mockReturnValue(true);
-    const close = vi.fn().mockResolvedValue(undefined);
-    vi.mocked(getCurrentWindow).mockReturnValue({
-      label: 'reader-0',
-      close,
-    } as unknown as ReturnType<typeof getCurrentWindow>);
-    const main = {
-      show: vi.fn().mockResolvedValue(undefined),
-      unminimize: vi.fn().mockResolvedValue(undefined),
-      setFocus: vi.fn().mockResolvedValue(undefined),
-    };
-    WebviewWindowCtor.getByLabel.mockResolvedValue(main);
-
-    const router = mockRouter();
-    await closeReaderWindowOrGoToLibrary(makeAppServiceWithWindow() as never, router);
-
-    expect(WebviewWindowCtor.getByLabel).toHaveBeenCalledWith('main');
-    expect(main.show).toHaveBeenCalled();
-    expect(close).toHaveBeenCalled();
-    expect(router.replace).not.toHaveBeenCalled();
-  });
-
-  test('uses lastLibraryParams from sessionStorage when navigating', async () => {
-    vi.mocked(isTauriAppPlatform).mockReturnValue(false);
-    sessionStorage.setItem('lastLibraryParams', 'sort=author');
-
-    const router = mockRouter();
-    await closeReaderWindowOrGoToLibrary(makeAppServiceWithWindow() as never, router);
-
-    expect(router.replace).toHaveBeenCalledWith('/library?sort=author', undefined);
-  });
-
-  test('falls back to navigation when appService is null', async () => {
-    vi.mocked(isTauriAppPlatform).mockReturnValue(true);
-
-    const router = mockRouter();
-    await closeReaderWindowOrGoToLibrary(null, router);
-
-    expect(router.replace).toHaveBeenCalledWith('/library', undefined);
+    expect(router.push).toHaveBeenCalledWith('/auth/update?redirect=%2Fuser%3Ftab%3Dsecurity');
   });
 });

@@ -166,7 +166,7 @@ describe('BaseAppService', () => {
 
   describe('default properties', () => {
     test('has correct default platform flags', () => {
-      expect(service.appPlatform).toBe('tauri');
+      expect(service.appPlatform).toBe('web');
       expect(service.isMobile).toBe(false);
       expect(service.isMacOSApp).toBe(false);
       expect(service.isAndroidApp).toBe(false);

@@ -37,9 +37,11 @@ const resolvePath = (path: string, base: BaseDir): ResolvedPath => {
 
 const dbName = 'AppFileSystem';
 const dbVersion = 1;
+let dbPromise: Promise<IDBDatabase> | null = null;
 
 async function openIndexedDB(): Promise<IDBDatabase> {
-  return new Promise((resolve, reject) => {
+  if (dbPromise) return dbPromise;
+  dbPromise = new Promise((resolve, reject) => {
     const request = indexedDB.open(dbName, dbVersion);
 
     request.onupgradeneeded = () => {
@@ -50,7 +52,38 @@ async function openIndexedDB(): Promise<IDBDatabase> {
     };
 
     request.onsuccess = () => resolve(request.result);
+    request.onerror = () => {
+      dbPromise = null;
+      reject(request.error);
+    };
+  });
+  return dbPromise;
+}
+
+function pathPrefixRange(prefix: string) {
+  return IDBKeyRange.bound(prefix, `${prefix}\uffff`);
+}
+
+async function cursorEach(
+  db: IDBDatabase,
+  mode: IDBTransactionMode,
+  range: IDBKeyRange,
+  fn: (cursor: IDBCursorWithValue) => void,
+): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const transaction = db.transaction('files', mode);
+    const store = transaction.objectStore('files');
+    const request = store.openCursor(range);
+
+    request.onsuccess = () => {
+      const cursor = request.result;
+      if (!cursor) return;
+      fn(cursor);
+      cursor.continue();
+    };
     request.onerror = () => reject(request.error);
+    transaction.oncomplete = () => resolve();
+    transaction.onerror = () => reject(transaction.error);
   });
 }
 
@@ -179,24 +212,13 @@ const indexedDBFileSystem: FileSystem = {
   },
   async removeDir(path: string, base: BaseDir) {
     const { fp } = this.resolvePath(path, base);
+    const prefix = fp.endsWith('/') ? fp : `${fp}/`;
     const db = await openIndexedDB();
-
-    return new Promise<void>((resolve, reject) => {
-      const transaction = db.transaction('files', 'readwrite');
-      const store = transaction.objectStore('files');
-      const request = store.getAll();
-
-      request.onsuccess = () => {
-        const files = request.result as { path: string }[];
-        files.forEach((file) => {
-          if (file.path.startsWith(fp)) {
-            store.delete(file.path);
-          }
-        });
-      };
-
-      transaction.oncomplete = () => resolve();
-      transaction.onerror = () => reject(transaction.error);
+    await cursorEach(db, 'readwrite', pathPrefixRange(fp), (cursor) => {
+      const file = cursor.value as { path: string };
+      if (file.path === fp || file.path.startsWith(prefix)) {
+        cursor.delete();
+      }
     });
   },
   async readDir(path: string, base: BaseDir) {
@@ -205,30 +227,34 @@ const indexedDBFileSystem: FileSystem = {
     const db = await openIndexedDB();
 
     return new Promise<FileItem[]>((resolve, reject) => {
+      const files: FileItem[] = [];
       const transaction = db.transaction('files', 'readonly');
       const store = transaction.objectStore('files');
-      const request = store.getAll();
+      const request = store.openCursor(pathPrefixRange(prefix));
 
       request.onsuccess = () => {
-        const files = request.result as { path: string; content: string | ArrayBuffer | Blob }[];
-        resolve(
-          files
-            .filter((file) => file.path.startsWith(prefix))
-            .map((file) => ({
-              path: file.path.slice(prefix.length),
-              size:
-                file.content instanceof Blob
-                  ? file.content.size
-                  : typeof file.content === 'string'
-                    ? file.content.length
-                    : file.content instanceof ArrayBuffer
-                      ? file.content.byteLength
-                      : 0,
-            })),
-        );
+        const cursor = request.result;
+        if (!cursor) return;
+        const file = cursor.value as { path: string; content: string | ArrayBuffer | Blob };
+        if (file.path.startsWith(prefix)) {
+          files.push({
+            path: file.path.slice(prefix.length),
+            size:
+              file.content instanceof Blob
+                ? file.content.size
+                : typeof file.content === 'string'
+                  ? file.content.length
+                  : file.content instanceof ArrayBuffer
+                    ? file.content.byteLength
+                    : 0,
+          });
+        }
+        cursor.continue();
       };
 
       request.onerror = () => reject(request.error);
+      transaction.oncomplete = () => resolve(files);
+      transaction.onerror = () => reject(transaction.error);
     });
   },
   async exists(path: string, base: BaseDir) {

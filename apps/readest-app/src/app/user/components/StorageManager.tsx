@@ -7,14 +7,7 @@ import { useThemeStore } from '@/store/themeStore';
 import { useLibraryStore } from '@/store/libraryStore';
 import { useTranslation } from '@/hooks/useTranslation';
 import { useLibrary } from '@/hooks/useLibrary';
-import {
-  listFiles,
-  getStorageStats,
-  purgeFiles,
-  type FileRecord,
-  type StorageStats,
-  type ListFilesParams,
-} from '@/libs/storage';
+import { listFiles, purgeFiles, type FileRecord, type ListFilesParams } from '@/libs/storage';
 import { eventDispatcher } from '@/utils/event';
 import { debounce } from '@/utils/debounce';
 import Spinner from '@/components/Spinner';
@@ -28,7 +21,6 @@ const StorageManager = () => {
   const [loading, setLoading] = useState(false);
   const [filesLoaded, setFilesLoaded] = useState(false);
   const [files, setFiles] = useState<FileRecord[]>([]);
-  const [stats, setStats] = useState<StorageStats | null>(null);
   const [selectedFiles, setSelectedFiles] = useState<Set<string>>(new Set());
   const [searchQuery, setSearchQuery] = useState('');
   const [searchInput, setSearchInput] = useState('');
@@ -68,22 +60,9 @@ const StorageManager = () => {
     }
   }, [currentPage, sortBy, sortOrder, searchQuery, _]);
 
-  const loadStats = useCallback(async () => {
-    setLoading(true);
-    try {
-      const statsData = await getStorageStats();
-      setStats(statsData);
-    } catch (error) {
-      console.error('Failed to load stats:', error);
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
   useEffect(() => {
     loadFiles();
-    loadStats();
-  }, [loadFiles, loadStats]);
+  }, [loadFiles]);
 
   // Group files by book_hash
   const groupedFiles = React.useMemo(() => {
@@ -199,7 +178,6 @@ const StorageManager = () => {
 
       if (result.deletedCount > 0) {
         await loadFiles();
-        await loadStats();
         setSelectedFiles(new Set());
 
         eventDispatcher.dispatch('toast', {
@@ -264,56 +242,6 @@ const StorageManager = () => {
 
   return (
     <div className='flex flex-col gap-6'>
-      {/* Stats Section */}
-      {stats ? (
-        <div className='bg-base-100 border-base-300 rounded-lg border p-4'>
-          <h3 className='text-base-content mb-4 text-lg font-semibold'>
-            {_('Cloud Storage Usage')}
-          </h3>
-          <div className='grid grid-cols-2 gap-4 sm:grid-cols-4'>
-            <div>
-              <div className='text-base-content/60 text-sm'>{_('Total Files')}</div>
-              <div className='text-base-content text-xl font-semibold'>{stats.totalFiles}</div>
-            </div>
-            <div>
-              <div className='text-base-content/60 text-sm'>{_('Total Size')}</div>
-              <div className='text-base-content text-xl font-semibold'>
-                {formatFileSize(stats.totalSize)}
-              </div>
-            </div>
-            <div>
-              <div className='text-base-content/60 text-sm'>{_('Quota')}</div>
-              <div className='text-base-content text-xl font-semibold'>
-                {formatFileSize(stats.quota)}
-              </div>
-            </div>
-            <div>
-              <div className='text-base-content/60 text-sm'>{_('Used')}</div>
-              <div className='text-base-content text-xl font-semibold'>
-                {stats.usagePercentage}%
-              </div>
-            </div>
-          </div>
-          <div className='bg-base-300 mt-4 h-2 w-full overflow-hidden rounded-full'>
-            <div
-              className='bg-primary h-full transition-all'
-              style={{ width: `${Math.min(stats.usagePercentage, 100)}%` }}
-            />
-          </div>
-        </div>
-      ) : (
-        <div className='bg-base-100 border-base-300 rounded-lg border p-4'>
-          <div className='skeleton mb-4 h-6 w-32'></div>
-          <div className='grid grid-cols-2 gap-4 sm:grid-cols-4'>
-            <div className='skeleton h-16 w-full'></div>
-            <div className='skeleton h-16 w-full'></div>
-            <div className='skeleton h-16 w-full'></div>
-            <div className='skeleton h-16 w-full'></div>
-          </div>
-          <div className='skeleton mt-4 h-2 w-full rounded-full'></div>
-        </div>
-      )}
-
       {/* Files Section */}
       <div className='bg-base-100 border-base-300 rounded-lg border'>
         <div className='border-base-300 flex flex-col gap-4 border-b p-4 sm:flex-row sm:items-center sm:justify-between'>

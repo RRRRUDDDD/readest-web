@@ -4,7 +4,7 @@
 
 ### Overview
 
-Readest is a cross-platform e-reader (macOS, Windows, Linux, Android, iOS, Web) built on Next.js and Tauri. It processes user-supplied ebook files, syncs data to the cloud, integrates with external services (OPDS catalogs, KOReader, DeepL, Yandex), and handles user authentication.
+Readest is a web e-reader built on Next.js. It processes user-supplied ebook files, syncs data to the cloud, integrates with external services (OPDS catalogs, KOReader, DeepL, Yandex), and handles user authentication.
 
 ### Assets
 
@@ -23,7 +23,7 @@ Readest is a cross-platform e-reader (macOS, Windows, Linux, Android, iOS, Web) 
 | Malicious ebook author  | Craft a malformed file to exploit the parser or renderer   |
 | Network attacker (MitM) | Intercept sync traffic to steal credentials or inject data |
 | Malicious OPDS server   | Serve crafted catalog responses to exploit the client      |
-| Compromised dependency  | Supply chain attack via npm or Cargo ecosystem             |
+| Compromised dependency  | Supply chain attack via npm ecosystem                      |
 | Unauthorized user       | Access another user's synced library or annotations        |
 
 ### Attack Surfaces & Mitigations
@@ -50,13 +50,8 @@ Readest is a cross-platform e-reader (macOS, Windows, Linux, Android, iOS, Web) 
 
 #### 5. Supply Chain
 
-- **Risk:** Compromised npm or Cargo packages could introduce malicious code.
-- **Mitigations:** Dependencies are pinned via `pnpm-lock.yaml` and `Cargo.lock`. Dependabot and GitHub's dependency review are enabled for automated vulnerability detection.
-
-#### 6. Desktop Native Code (Tauri)
-
-- **Risk:** Tauri IPC commands could be abused by malicious web content to access the filesystem or OS APIs.
-- **Mitigations:** Tauri's allowlist restricts which IPC commands are exposed. File system access is scoped to the application data directory.
+- **Risk:** Compromised npm packages could introduce malicious code.
+- **Mitigations:** Dependencies are pinned via `pnpm-lock.yaml`. Dependabot and GitHub's dependency review are enabled for automated vulnerability detection.
 
 ### Out of Scope
 

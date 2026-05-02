@@ -1,6 +1,4 @@
 import { AppService } from '@/types/system';
-import { isTauriAppPlatform } from '@/services/environment';
-import { basename } from '@tauri-apps/api/path';
 import { stubTranslation as _ } from '@/utils/misc';
 import { BOOK_ACCEPT_FORMATS, SUPPORTED_BOOK_EXTS } from '@/services/constants';
 
@@ -16,7 +14,6 @@ export interface SelectedFile {
   // For Web file
   file?: File;
 
-  // For Tauri file
   path?: string;
   basePath?: string;
 }
@@ -40,43 +37,9 @@ const selectFileWeb = (options: FileSelectorOptions): Promise<File[]> => {
   });
 };
 
-const selectFileTauri = async (
-  options: FileSelectorOptions,
-  appService: AppService,
-  _: (key: string) => string,
-): Promise<string[]> => {
-  const noFilter = appService?.isIOSApp || (appService?.isAndroidApp && options.type === 'books');
-  const exts = noFilter ? [] : options.extensions || [];
-  const title = options.dialogTitle || _('Select Files');
-  let files = (await appService?.selectFiles(_(title), exts)) || [];
-
-  if (noFilter && options.extensions) {
-    files = await Promise.all(
-      files.map(async (file: string) => {
-        let processedFile = file;
-        if (appService?.isAndroidApp && file.startsWith('content://')) {
-          processedFile = await basename(file);
-        }
-        const fileExt = processedFile.split('.').pop()?.toLowerCase() || 'unknown';
-        const extensions = options.extensions!;
-        const shouldInclude = extensions.includes(fileExt) || extensions.includes('*');
-        return shouldInclude ? file : null;
-      }),
-    ).then((results) => results.filter((file) => file !== null));
-  }
-
-  return files;
-};
-
 const processWebFiles = (files: File[]): SelectedFile[] => {
   return files.map((file) => ({
     file,
-  }));
-};
-
-const processTauriFiles = (files: string[]): SelectedFile[] => {
-  return files.map((path) => ({
-    path,
   }));
 };
 
@@ -87,15 +50,9 @@ export const useFileSelector = (appService: AppService | null, _: (key: string) 
       return { files: [] as SelectedFile[], error: 'App service is not available' };
     }
     try {
-      if (isTauriAppPlatform()) {
-        const filePaths = await selectFileTauri(options, appService, _);
-        const files = await processTauriFiles(filePaths);
-        return { files };
-      } else {
-        const webFiles = await selectFileWeb(options);
-        const files = processWebFiles(webFiles);
-        return { files };
-      }
+      const webFiles = await selectFileWeb(options);
+      const files = processWebFiles(webFiles);
+      return { files };
     } catch (error) {
       return {
         files: [],

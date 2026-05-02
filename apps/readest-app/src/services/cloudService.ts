@@ -63,11 +63,12 @@ export async function uploadFileToCloud(
   handleProgress: ProgressHandler,
   hash: string,
   temp: boolean = false,
+  signal?: AbortSignal,
 ): Promise<string | undefined> {
   console.log('Uploading file:', lfp, 'to', cfp);
   const file = await fs.openFile(lfp, base, cfp);
   const localFullpath = await resolveFilePath(lfp, base);
-  const downloadUrl = await uploadFile(file, localFullpath, handleProgress, hash, temp);
+  const downloadUrl = await uploadFile(file, localFullpath, handleProgress, hash, temp, signal);
   const f = file as ClosableFile;
   if (f && f.close) {
     await f.close();
@@ -80,6 +81,7 @@ export async function uploadBook(
   resolveFilePath: (path: string, base: BaseDir) => Promise<string>,
   book: Book,
   onProgress?: ProgressHandler,
+  signal?: AbortSignal,
 ): Promise<void> {
   let uploaded = false;
   const completedFiles = { count: 0 };
@@ -103,7 +105,17 @@ export async function uploadBook(
   if (coverExist) {
     const lfp = getCoverFilename(book);
     const cfp = `${CLOUD_BOOKS_SUBDIR}/${getCoverFilename(book)}`;
-    await uploadFileToCloud(fs, resolveFilePath, lfp, cfp, 'Books', handleProgress, book.hash);
+    await uploadFileToCloud(
+      fs,
+      resolveFilePath,
+      lfp,
+      cfp,
+      'Books',
+      handleProgress,
+      book.hash,
+      false,
+      signal,
+    );
     uploaded = true;
     completedFiles.count++;
   }
@@ -111,7 +123,17 @@ export async function uploadBook(
   if (bookFileExist) {
     const lfp = getLocalBookFilename(book);
     const cfp = `${CLOUD_BOOKS_SUBDIR}/${getRemoteBookFilename(book)}`;
-    await uploadFileToCloud(fs, resolveFilePath, lfp, cfp, 'Books', handleProgress, book.hash);
+    await uploadFileToCloud(
+      fs,
+      resolveFilePath,
+      lfp,
+      cfp,
+      'Books',
+      handleProgress,
+      book.hash,
+      false,
+      signal,
+    );
     uploaded = true;
     completedFiles.count++;
   }
@@ -133,10 +155,11 @@ export async function downloadCloudFile(
   lfp: string,
   cfp: string,
   onProgress: ProgressHandler,
+  signal?: AbortSignal,
 ): Promise<void> {
   console.log('Downloading file:', cfp, 'to', lfp);
   const dstPath = `${localBooksDir}/${lfp}`;
-  await downloadFile({ appService, cfp, dst: dstPath, onProgress });
+  await downloadFile({ appService, cfp, dst: dstPath, onProgress, signal });
 }
 
 export async function downloadBookCovers(
@@ -188,6 +211,7 @@ export async function downloadBook(
   onlyCover: boolean = false,
   redownload: boolean = false,
   onProgress?: ProgressHandler,
+  signal?: AbortSignal,
 ): Promise<void> {
   let bookDownloaded = false;
   let bookCoverDownloaded = false;
@@ -213,7 +237,7 @@ export async function downloadBook(
     if (needDownCover) {
       const lfp = getCoverFilename(book);
       const cfp = `${CLOUD_BOOKS_SUBDIR}/${lfp}`;
-      await downloadCloudFile(appService, localBooksDir, lfp, cfp, handleProgress);
+      await downloadCloudFile(appService, localBooksDir, lfp, cfp, handleProgress, signal);
       bookCoverDownloaded = true;
     }
   } catch (error) {
@@ -228,7 +252,7 @@ export async function downloadBook(
   if (needDownBook) {
     const lfp = getLocalBookFilename(book);
     const cfp = `${CLOUD_BOOKS_SUBDIR}/${getRemoteBookFilename(book)}`;
-    await downloadCloudFile(appService, localBooksDir, lfp, cfp, handleProgress);
+    await downloadCloudFile(appService, localBooksDir, lfp, cfp, handleProgress, signal);
     const localFullpath = `${localBooksDir}/${lfp}`;
     bookDownloaded = await fs.exists(localFullpath, 'None');
     completedFiles.count++;

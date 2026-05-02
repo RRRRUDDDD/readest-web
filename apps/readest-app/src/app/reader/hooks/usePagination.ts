@@ -7,7 +7,7 @@ import { useBookDataStore } from '@/store/bookDataStore';
 import { useDeviceControlStore } from '@/store/deviceStore';
 import { eventDispatcher } from '@/utils/event';
 import { isTauriAppPlatform } from '@/services/environment';
-import { tauriGetWindowLogicalPosition } from '@/utils/window';
+import { getWindowLogicalPosition } from '@/utils/window';
 import { getReadingRulerMoveDirection } from '../utils/readingRuler';
 import { SmoothScroller, type SmoothScrollTarget } from '../utils/smoothWheelScroll';
 import { useTouchInterceptor } from './useTouchInterceptor';
@@ -150,7 +150,7 @@ export const usePagination = (
               if (appService?.isMobile) {
                 windowStartX = 0;
               } else {
-                const windowPosition = (await tauriGetWindowLogicalPosition()) as {
+                const windowPosition = (await getWindowLogicalPosition()) as {
                   x: number;
                   y: number;
                 };

@@ -11,6 +11,12 @@ import {
 import { DBBookConfig, DBBook, DBBookNote } from '@/types/records';
 import { sanitizeString } from './sanitize';
 
+const parseJsonish = <T>(value: unknown): T | undefined => {
+  if (!value) return undefined;
+  if (typeof value === 'string') return JSON.parse(value) as T;
+  return value as T;
+};
+
 export const transformBookConfigToDB = (bookConfig: unknown, userId: string): DBBookConfig => {
   const {
     bookHash,
@@ -55,10 +61,10 @@ export const transformBookConfigFromDB = (dbBookConfig: DBBookConfig): BookConfi
     metaHash: meta_hash,
     location,
     xpointer,
-    progress: progress && JSON.parse(progress),
-    rsvpPosition: rsvp_position && JSON.parse(rsvp_position),
-    searchConfig: search_config && JSON.parse(search_config),
-    viewSettings: view_settings && JSON.parse(view_settings),
+    progress: parseJsonish(progress),
+    rsvpPosition: parseJsonish(rsvp_position),
+    searchConfig: parseJsonish(search_config),
+    viewSettings: parseJsonish(view_settings),
     updatedAt: new Date(updated_at!).getTime(),
   } as BookConfig;
 };
@@ -136,7 +142,7 @@ export const transformBookFromDB = (dbBook: DBBook): Book => {
     progress: progress,
     readingStatus: reading_status as ReadingStatus,
     sourceTitle: source_title,
-    metadata: metadata ? JSON.parse(metadata) : null,
+    metadata: parseJsonish(metadata),
     createdAt: new Date(created_at!).getTime(),
     updatedAt: new Date(updated_at!).getTime(),
     deletedAt: deleted_at ? new Date(deleted_at).getTime() : null,

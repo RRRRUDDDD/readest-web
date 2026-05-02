@@ -1,0 +1,58 @@
+name: Publish to npm
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  id-token: write
+  contents: write
+
+jobs:
+  publish-npm:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22.14.0'
+          registry-url: 'https://registry.npmjs.org'
+
+      - name: Update npm to latest
+        run: npm install -g npm@latest
+
+      - name: Verify npm version
+        run: npm --version
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build project
+        run: npm run build
+
+      - name: Publish to npm (Trusted Publishing via OIDC)
+        run: npm publish --provenance
+
+      - name: Create GitHub Release
+        if: success()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          TAG_NAME=${GITHUB_REF#refs/tags/}
+          echo "✅ Successfully published ${TAG_NAME} to npm"
+          echo "📦 Package: https://www.npmjs.com/package/js-mdict"
+          
+          # Check if release already exists
+          if ! gh release view "${TAG_NAME}" &>/dev/null; then
+            echo "Creating GitHub release for ${TAG_NAME}..."
+            gh release create "${TAG_NAME}" \
+              --title "${TAG_NAME}" \
+              --notes "Released to npm: https://www.npmjs.com/package/js-mdict" \
+              --latest
+          else
+            echo "GitHub release ${TAG_NAME} already exists"
+          fi

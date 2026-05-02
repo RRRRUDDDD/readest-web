@@ -1,7 +1,3 @@
-import { invoke, Channel } from '@tauri-apps/api/core';
-
-export type UploadMethod = 'POST' | 'PUT';
-
 export const enum UploadFileError {
   Unauthorized = 'Unauthorized access',
   DownloadFailed = 'File download failed',
@@ -15,11 +11,18 @@ export interface ProgressPayload {
 
 export type ProgressHandler = (progress: ProgressPayload) => void;
 
-export const webUpload = (file: File, uploadUrl: string, onProgress?: ProgressHandler) => {
+export const webUpload = (
+  file: File,
+  uploadUrl: string,
+  onProgress?: ProgressHandler,
+  signal?: AbortSignal,
+) => {
   return new Promise<void>((resolve, reject) => {
     const startTime = Date.now();
     const xhr = new XMLHttpRequest();
     xhr.open('PUT', uploadUrl, true);
+    const abort = () => xhr.abort();
+    signal?.addEventListener('abort', abort, { once: true });
 
     xhr.upload.onprogress = (event) => {
       if (onProgress && event.lengthComputable) {
@@ -32,6 +35,7 @@ export const webUpload = (file: File, uploadUrl: string, onProgress?: ProgressHa
     };
 
     xhr.onload = () => {
+      signal?.removeEventListener('abort', abort);
       if (xhr.status >= 200 && xhr.status < 300) {
         resolve();
       } else {
@@ -39,7 +43,15 @@ export const webUpload = (file: File, uploadUrl: string, onProgress?: ProgressHa
       }
     };
 
-    xhr.onerror = () => reject(new Error('Upload failed'));
+    xhr.onerror = () => {
+      signal?.removeEventListener('abort', abort);
+      reject(new Error('Upload failed'));
+    };
+
+    xhr.onabort = () => {
+      signal?.removeEventListener('abort', abort);
+      reject(new DOMException('Upload aborted', 'AbortError'));
+    };
 
     xhr.send(file);
   });
@@ -49,10 +61,12 @@ export const webDownload = async (
   downloadUrl: string,
   onProgress?: ProgressHandler,
   headers?: Record<string, string>,
+  signal?: AbortSignal,
 ) => {
   const response = await fetch(downloadUrl, {
     method: 'GET',
     headers: headers ? headers : undefined,
+    signal,
   });
   if (!response.ok) {
     if (response.status === 401 || response.status === 403) {
@@ -92,59 +106,10 @@ export const webDownload = async (
   return { headers: responseHeaders, blob: new Blob(chunks as BlobPart[]) };
 };
 
-export const tauriUpload = async (
-  url: string,
-  filePath: string,
-  method: UploadMethod,
-  progressHandler?: ProgressHandler,
-  headers?: Map<string, string>,
-): Promise<string> => {
-  const ids = new Uint32Array(1);
-  window.crypto.getRandomValues(ids);
-  const id = ids[0];
-
-  const onProgress = new Channel<ProgressPayload>();
-  if (progressHandler) {
-    onProgress.onmessage = progressHandler;
-  }
-
-  return await invoke('upload_file', {
-    id,
-    url,
-    filePath,
-    method,
-    headers: headers ?? {},
-    onProgress,
-  });
-};
-
 export const tauriDownload = async (
-  url: string,
-  filePath: string,
-  progressHandler?: ProgressHandler,
-  headers?: Record<string, string>,
-  body?: string,
-  singleThreaded?: boolean,
-  skipSslVerification?: boolean,
-): Promise<Record<string, string>> => {
-  const ids = new Uint32Array(1);
-  window.crypto.getRandomValues(ids);
-  const id = ids[0];
-
-  const onProgress = new Channel<ProgressPayload>();
-  if (progressHandler) {
-    onProgress.onmessage = progressHandler;
-  }
-
-  const responseHeaders = await invoke<Record<string, string>>('download_file', {
-    id,
-    url,
-    filePath,
-    headers: headers ?? {},
-    onProgress,
-    body,
-    singleThreaded,
-    skipSslVerification,
-  });
-  return responseHeaders;
+  _downloadUrl: string,
+  _filePath: string,
+  _onProgress?: ProgressHandler,
+): Promise<void> => {
+  throw new Error('Native file download is not available in the web build');
 };

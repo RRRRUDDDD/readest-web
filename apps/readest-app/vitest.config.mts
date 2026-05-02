@@ -3,6 +3,8 @@ import { defineConfig } from 'vitest/config';
 import react from '@vitejs/plugin-react';
 import tsconfigPaths from 'vite-tsconfig-paths';
 
+const tauriShim = path.resolve(__dirname, 'src/shims/tauri.ts');
+
 export default defineConfig({
   plugins: [tsconfigPaths(), react()],
   resolve: {
@@ -18,6 +20,29 @@ export default defineConfig({
       // Pin all `fflate` resolutions to the app's copy to keep js-mdict
       // self-contained at the source-tree level.
       fflate: path.resolve(__dirname, 'node_modules/fflate'),
+      '@tauri-apps/api/core': tauriShim,
+      '@tauri-apps/api/event': tauriShim,
+      '@tauri-apps/api/menu': tauriShim,
+      '@tauri-apps/api/path': tauriShim,
+      '@tauri-apps/api/webview': tauriShim,
+      '@tauri-apps/api/webviewWindow': tauriShim,
+      '@tauri-apps/api/window': tauriShim,
+      '@tauri-apps/plugin-cli': tauriShim,
+      '@tauri-apps/plugin-deep-link': tauriShim,
+      '@tauri-apps/plugin-dialog': tauriShim,
+      '@tauri-apps/plugin-fs': tauriShim,
+      '@tauri-apps/plugin-haptics': tauriShim,
+      '@tauri-apps/plugin-http': tauriShim,
+      '@tauri-apps/plugin-opener': tauriShim,
+      '@tauri-apps/plugin-os': tauriShim,
+      '@tauri-apps/plugin-process': tauriShim,
+      '@tauri-apps/plugin-shell': tauriShim,
+      '@tauri-apps/plugin-updater': tauriShim,
+      '@tauri-apps/plugin-websocket': tauriShim,
+      '@fabianlars/tauri-plugin-oauth': tauriShim,
+      '@choochmeque/tauri-plugin-sharekit-api': tauriShim,
+      'tauri-plugin-device-info-api': tauriShim,
+      'tauri-plugin-turso': tauriShim,
     },
   },
   test: {
