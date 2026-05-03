@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef } from 'react';
+import { useCallback, useEffect, useMemo, useRef } from 'react';
 import { useAuth } from '@/context/AuthContext';
 import { useSync } from '@/hooks/useSync';
 import { BookConfig, FIXED_LAYOUT_FORMATS } from '@/types/book';
@@ -12,6 +12,7 @@ import { debounce } from '@/utils/debounce';
 import { eventDispatcher } from '@/utils/event';
 import { DEFAULT_BOOK_SEARCH_CONFIG, SYNC_PROGRESS_INTERVAL_SEC } from '@/services/constants';
 import { getCFIFromXPointer, getXPointerFromCFI } from '@/utils/xcfi';
+import { createSyncSequenceGuard } from '../utils/syncSequenceGuard';
 
 export const useProgressSync = (bookKey: string) => {
   const _ = useTranslation();
@@ -24,10 +25,15 @@ export const useProgressSync = (bookKey: string) => {
 
   const configPulled = useRef(false);
   const hasPulledConfigOnce = useRef(false);
+  // Per-hook guard: ensures stale push/pull responses can't clobber state if a
+  // newer cycle has begun, and that any in-flight callback is invalidated on
+  // unmount.
+  const guard = useMemo(() => createSyncSequenceGuard(), []);
 
   const pushConfig = async (bookKey: string, config: BookConfig | null) => {
     const book = getBookData(bookKey)?.book;
     if (!config || !book || !user) return;
+    const ticket = guard.next();
     const bookHash = bookKey.split('-')[0]!;
     const metaHash = book.metaHash;
     const newConfig = { ...config, bookHash, metaHash };
@@ -36,14 +42,17 @@ export const useProgressSync = (bookKey: string) => {
     );
     delete compressedConfig.booknotes;
     await syncConfigs([compressedConfig], bookHash, metaHash, 'push');
+    if (!guard.isCurrent(ticket)) return; // superseded by a newer push or unmounted
   };
 
   const pullConfig = async (bookKey: string) => {
     const book = getBookData(bookKey)?.book;
     if (!user || !book) return;
+    const ticket = guard.next();
     const bookHash = bookKey.split('-')[0]!;
     const metaHash = book.metaHash;
     await syncConfigs([], bookHash, metaHash, 'pull');
+    if (!guard.isCurrent(ticket)) return; // superseded or unmounted
   };
 
   const syncConfig = async () => {
@@ -103,8 +112,20 @@ export const useProgressSync = (bookKey: string) => {
   useEffect(() => {
     if (!progress?.location || !user) return;
     handleAutoSync();
+    return () => {
+      // Cancel pending debounced sync on unmount or progress change so a
+      // pending sync can't fire after the hook has been torn down.
+      handleAutoSync.cancel();
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [progress?.location]);
+
+  // Cancel all in-flight sync tickets when the hook unmounts entirely.
+  useEffect(() => {
+    return () => {
+      guard.cancelAll();
+    };
+  }, [guard]);
 
   // Pull: pull progress once when the book is opened
   useEffect(() => {

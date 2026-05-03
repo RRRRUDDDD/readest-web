@@ -3,6 +3,7 @@
 import clsx from 'clsx';
 import * as React from 'react';
 import { useEffect, Suspense } from 'react';
+import dynamic from 'next/dynamic';
 import { useRouter } from 'next/navigation';
 
 import { useEnv } from '@/context/EnvContext';
@@ -20,13 +21,28 @@ import { eventDispatcher } from '@/utils/event';
 import { interceptWindowOpen } from '@/utils/open';
 import { mountAdditionalFonts } from '@/styles/fonts';
 import { getSysFontsList, setSystemUIVisibility } from '@/utils/bridge';
-import { KeyboardShortcutsHelp } from '@/components/KeyboardShortcutsHelp';
-import { ReadwiseSettingsWindow } from './ReadwiseSettings';
-import { ProofreadRulesManager } from './ProofreadRules';
 import { Toast } from '@/components/Toast';
 import { getLocale } from '@/utils/misc';
 import { initDayjs } from '@/utils/time';
 import ReaderContent from './ReaderContent';
+
+// Lazy-load secondary windows that are only opened on user interaction.
+// They previously mounted eagerly inside the reader Suspense subtree, which
+// pulled their (sometimes heavy) module dependencies into the reader's
+// initial chunk and added avoidable hooks/store subscriptions to every
+// reader render. With dynamic + ssr:false the chunks load on demand.
+const KeyboardShortcutsHelp = dynamic(
+  () => import('@/components/KeyboardShortcutsHelp').then((m) => m.KeyboardShortcutsHelp),
+  { ssr: false, loading: () => null },
+);
+const ReadwiseSettingsWindow = dynamic(
+  () => import('./ReadwiseSettings').then((m) => m.ReadwiseSettingsWindow),
+  { ssr: false, loading: () => null },
+);
+const ProofreadRulesManager = dynamic(
+  () => import('./ProofreadRules').then((m) => m.ProofreadRulesManager),
+  { ssr: false, loading: () => null },
+);
 
 /*
 Z-Index Layering Guide:

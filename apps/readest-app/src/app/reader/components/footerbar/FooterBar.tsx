@@ -1,6 +1,7 @@
 import clsx from 'clsx';
 import React, { useState, useCallback, useMemo, useEffect, useRef } from 'react';
 import { useEnv } from '@/context/EnvContext';
+import { useShallow } from 'zustand/react/shallow';
 import { useSpatialNavigation } from '@/app/reader/hooks/useSpatialNavigation';
 import { useReaderStore } from '@/store/readerStore';
 import { useSidebarStore } from '@/store/sidebarStore';
@@ -26,8 +27,22 @@ const FooterBar: React.FC<FooterBarProps> = ({
   const _ = useTranslation();
   const { appService } = useEnv();
   const { getConfig, setConfig, getBookData } = useBookDataStore();
-  const { hoveredBookKey, setHoveredBookKey } = useReaderStore();
-  const { getView, getViewState, getProgress, getViewSettings } = useReaderStore();
+  // FooterBar updates per page-turn; subscribe only to fields it reads to
+  // avoid re-rendering on every progress / hover mutation triggered elsewhere.
+  const { hoveredBookKey, setHoveredBookKey } = useReaderStore(
+    useShallow((s) => ({
+      hoveredBookKey: s.hoveredBookKey,
+      setHoveredBookKey: s.setHoveredBookKey,
+    })),
+  );
+  const { getView, getViewState, getProgress, getViewSettings } = useReaderStore(
+    useShallow((s) => ({
+      getView: s.getView,
+      getViewState: s.getViewState,
+      getProgress: s.getProgress,
+      getViewSettings: s.getViewSettings,
+    })),
+  );
   const { isSideBarVisible, setSideBarVisible } = useSidebarStore();
   const { acquireBackKeyInterception, releaseBackKeyInterception } = useDeviceControlStore();
 

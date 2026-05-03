@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 
 import { Book } from '@/types/book';
@@ -8,12 +8,13 @@ import { useEnv } from '@/context/EnvContext';
 import { useSettingsStore } from '@/store/settingsStore';
 import { useBookDataStore } from '@/store/bookDataStore';
 import { useReaderStore } from '@/store/readerStore';
+import { useShallow } from 'zustand/react/shallow';
 import { useSidebarStore } from '@/store/sidebarStore';
 import { useGamepad } from '@/hooks/useGamepad';
 import { useTranslation } from '@/hooks/useTranslation';
 import { SystemSettings } from '@/types/settings';
 import { uniqueId } from '@/utils/misc';
-import { throttle } from '@/utils/throttle';
+import { logger } from '@/utils/logger';
 import { eventDispatcher } from '@/utils/event';
 import { closeReaderWindowOrGoToLibrary, navigateToLibrary } from '@/utils/nav';
 import { BOOK_IDS_SEPARATOR } from '@/services/constants';
@@ -21,6 +22,7 @@ import { BookDetailModal } from '@/components/metadata';
 
 import useBooksManager from '../hooks/useBooksManager';
 import useBookShortcuts from '../hooks/useBookShortcuts';
+import { createCloseTransaction } from '../utils/closeTransaction';
 import Spinner from '@/components/Spinner';
 import SideBar from './sidebar/SideBar';
 import Notebook from './notebook/Notebook';
@@ -36,8 +38,23 @@ const ReaderContent: React.FC<{ ids?: string; settings: SystemSettings }> = ({ i
   const { sideBarBookKey, setSideBarBookKey } = useSidebarStore();
   const { saveSettings } = useSettingsStore();
   const { getConfig, getBookData, saveConfig } = useBookDataStore();
-  const { getView, setBookKeys, getViewSettings } = useReaderStore();
-  const { initViewState, getViewState, clearViewState } = useReaderStore();
+  // Pick only the reader-store actions/getters used here. ReaderContent is
+  // mounted high in the tree; without selector subscriptions it would
+  // re-render on every store mutation (progress / hover / view settings).
+  const { getView, setBookKeys, getViewSettings } = useReaderStore(
+    useShallow((s) => ({
+      getView: s.getView,
+      setBookKeys: s.setBookKeys,
+      getViewSettings: s.getViewSettings,
+    })),
+  );
+  const { initViewState, getViewState, clearViewState } = useReaderStore(
+    useShallow((s) => ({
+      initViewState: s.initViewState,
+      getViewState: s.getViewState,
+      clearViewState: s.clearViewState,
+    })),
+  );
   const { isSettingsDialogOpen, settingsDialogBookKey } = useSettingsStore();
   const [showDetailsBook, setShowDetailsBook] = useState<Book | null>(null);
   const isInitiating = useRef(false);
@@ -57,14 +74,14 @@ const ReaderContent: React.FC<{ ids?: string; settings: SystemSettings }> = ({ i
     const initialBookKeys = initialIds.map((id) => `${id}-${uniqueId()}`);
     setBookKeys(initialBookKeys);
     const uniqueIds = new Set<string>();
-    console.log('Initialize books', initialBookKeys);
+    logger.debug('Initialize books', initialBookKeys);
     initialBookKeys.forEach((key, index) => {
       const id = key.split('-')[0]!;
       const isPrimary = !uniqueIds.has(id);
       uniqueIds.add(id);
       if (!getViewState(key)) {
         initViewState(envConfig, id, key, isPrimary).catch((error) => {
-          console.log('Error initializing book', key, error);
+          logger.error('Error initializing book', key, error);
           setErrorLoading(true);
           eventDispatcher.dispatch('toast', {
             message: _('Unable to open book'),
@@ -94,29 +111,6 @@ const ReaderContent: React.FC<{ ids?: string; settings: SystemSettings }> = ({ i
     };
   }, []);
 
-  useEffect(() => {
-    if (bookKeys && bookKeys.length > 0) {
-      const settings = useSettingsStore.getState().settings;
-      const lastOpenBooks = bookKeys.map((key) => key.split('-')[0]!);
-      if (settings.lastOpenBooks?.toString() !== lastOpenBooks.toString()) {
-        settings.lastOpenBooks = lastOpenBooks;
-        saveSettings(envConfig, settings);
-      }
-    }
-
-    window.addEventListener('beforeunload', handleCloseBooks);
-    eventDispatcher.on('beforereload', handleCloseBooks);
-    eventDispatcher.on('close-reader', handleCloseBooks);
-    eventDispatcher.on('quit-app', handleCloseBooks);
-    return () => {
-      window.removeEventListener('beforeunload', handleCloseBooks);
-      eventDispatcher.off('beforereload', handleCloseBooks);
-      eventDispatcher.off('close-reader', handleCloseBooks);
-      eventDispatcher.off('quit-app', handleCloseBooks);
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [bookKeys]);
-
   const saveBookConfig = async (bookKey: string) => {
     const config = getConfig(bookKey);
     const { book } = getBookData(bookKey) || {};
@@ -129,63 +123,167 @@ const ReaderContent: React.FC<{ ids?: string; settings: SystemSettings }> = ({ i
   };
 
   const saveConfigAndCloseBook = async (bookKey: string) => {
-    console.log('Closing book', bookKey);
+    logger.debug('Closing book', bookKey);
 
     try {
       getView(bookKey)?.close();
       getView(bookKey)?.remove();
     } catch {
-      console.info('Error closing book', bookKey);
+      logger.error('Error closing book', bookKey);
     }
     eventDispatcher.dispatch('tts-stop', { bookKey });
     await saveBookConfig(bookKey);
     clearViewState(bookKey);
   };
 
+  // Refs let the close transaction observe the latest closures + bookKeys
+  // without recreating the transaction (and its in-flight slot) on every
+  // render — concurrent triggers must share a single in-flight promise.
+  const bookKeysRef = useRef(bookKeys);
+  bookKeysRef.current = bookKeys;
+  const saveConfigAndCloseBookRef = useRef(saveConfigAndCloseBook);
+  saveConfigAndCloseBookRef.current = saveConfigAndCloseBook;
+
+  const closeTx = useMemo(
+    () =>
+      createCloseTransaction({
+        getBookKeys: () => bookKeysRef.current,
+        saveConfigAndCloseBook: (key) => saveConfigAndCloseBookRef.current(key),
+        saveAllSettings: async () => {
+          const settings = useSettingsStore.getState().settings;
+          await saveSettings(envConfig, settings);
+        },
+      }),
+    // saveSettings + envConfig are stable (store action / context value); we
+    // intentionally exclude them from deps to keep the transaction singleton.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [],
+  );
+
+  useEffect(() => {
+    if (bookKeys && bookKeys.length > 0) {
+      const settings = useSettingsStore.getState().settings;
+      const lastOpenBooks = bookKeys.map((key) => key.split('-')[0]!);
+      if (settings.lastOpenBooks?.toString() !== lastOpenBooks.toString()) {
+        settings.lastOpenBooks = lastOpenBooks;
+        saveSettings(envConfig, settings);
+      }
+    }
+
+    const onBeforeUnload = () => {
+      // beforeunload cannot await; fire saves best-effort. Async paths
+      // (handleCloseBook / handleCloseBooksToLibrary) own the awaited path.
+      closeTx.flushSync();
+    };
+    const onCloseEvent = () => {
+      // Fire-and-forget; in-flight guard inside closeAll coalesces concurrent
+      // close-reader / quit-app / beforereload events.
+      void closeTx.closeAll();
+    };
+    window.addEventListener('beforeunload', onBeforeUnload);
+    eventDispatcher.on('beforereload', onCloseEvent);
+    eventDispatcher.on('close-reader', onCloseEvent);
+    eventDispatcher.on('quit-app', onCloseEvent);
+    return () => {
+      window.removeEventListener('beforeunload', onBeforeUnload);
+      eventDispatcher.off('beforereload', onCloseEvent);
+      eventDispatcher.off('close-reader', onCloseEvent);
+      eventDispatcher.off('quit-app', onCloseEvent);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [bookKeys]);
+
   const navigateBackToLibrary = () => {
     navigateToLibrary(router, '', undefined, true);
   };
 
-  const saveSettingsAndGoToLibrary = () => {
-    saveSettings(envConfig, settings);
+  const saveSettingsAndGoToLibrary = async () => {
+    await saveSettings(envConfig, settings);
     navigateBackToLibrary();
   };
 
-  const handleCloseBooks = throttle(async () => {
-    const settings = useSettingsStore.getState().settings;
-    await Promise.all(bookKeys.map(async (key) => await saveConfigAndCloseBook(key)));
-    await saveSettings(envConfig, settings);
-  }, 200);
-
   const handleCloseBooksToLibrary = async () => {
-    handleCloseBooks();
+    await closeTx.closeAll();
     navigateBackToLibrary();
   };
 
   const handleCloseBook = async (bookKey: string) => {
-    saveConfigAndCloseBook(bookKey);
+    await closeTx.closeOne(bookKey);
     if (sideBarBookKey === bookKey) {
       setSideBarBookKey(getNextBookKey(sideBarBookKey));
     }
     dismissBook(bookKey);
     if (bookKeys.filter((key) => key !== bookKey).length == 0) {
-      saveSettingsAndGoToLibrary();
+      await saveSettingsAndGoToLibrary();
     }
   };
 
   if (!bookKeys || bookKeys.length === 0) return null;
   const bookData = getBookData(bookKeys[0]!);
   const viewSettings = getViewSettings(bookKeys[0]!);
-  if (!bookData || !bookData.book || !bookData.bookDoc || !viewSettings) {
-    setTimeout(() => setLoading(true), 200);
-    return (
-      loading &&
-      !errorLoading && (
-        <div className='hero hero-content full-height'>
-          <Spinner loading={true} />
-        </div>
-      )
-    );
+  const isReady = !!bookData?.book && !!bookData?.bookDoc && !!viewSettings;
+
+  return (
+    <ReaderContentBody
+      isReady={isReady}
+      loading={loading}
+      errorLoading={errorLoading}
+      setLoading={setLoading}
+      bookKeys={bookKeys}
+      onCloseBook={handleCloseBook}
+      onCloseBooksToLibrary={handleCloseBooksToLibrary}
+      isSettingsDialogOpen={isSettingsDialogOpen}
+      settingsDialogBookKey={settingsDialogBookKey}
+      showDetailsBook={showDetailsBook}
+      setShowDetailsBook={setShowDetailsBook}
+    />
+  );
+};
+
+interface ReaderContentBodyProps {
+  isReady: boolean;
+  loading: boolean;
+  errorLoading: boolean;
+  setLoading: (v: boolean) => void;
+  bookKeys: string[];
+  onCloseBook: (bookKey: string) => Promise<void>;
+  onCloseBooksToLibrary: () => Promise<void>;
+  isSettingsDialogOpen: boolean;
+  settingsDialogBookKey: string;
+  showDetailsBook: Book | null;
+  setShowDetailsBook: (book: Book | null) => void;
+}
+
+// Split into a body component so we can use a `useEffect` to schedule the
+// loading-spinner delay timer. Previously the parent scheduled a `setTimeout`
+// inside its render branch — which fired a fresh timer on every re-render and
+// continued to fire after unmount. Pulling the not-ready branch into a
+// dedicated effect with a cleanup eliminates both leaks.
+const ReaderContentBody: React.FC<ReaderContentBodyProps> = ({
+  isReady,
+  loading,
+  errorLoading,
+  setLoading,
+  bookKeys,
+  onCloseBook,
+  onCloseBooksToLibrary,
+  isSettingsDialogOpen,
+  settingsDialogBookKey,
+  showDetailsBook,
+  setShowDetailsBook,
+}) => {
+  useEffect(() => {
+    if (isReady) return;
+    const timer = setTimeout(() => setLoading(true), 200);
+    return () => clearTimeout(timer);
+  }, [isReady, setLoading]);
+
+  if (!isReady) {
+    return loading && !errorLoading ? (
+      <div className='hero hero-content full-height'>
+        <Spinner loading={true} />
+      </div>
+    ) : null;
   }
 
   return (
@@ -193,8 +291,8 @@ const ReaderContent: React.FC<{ ids?: string; settings: SystemSettings }> = ({ i
       <SideBar />
       <BooksGrid
         bookKeys={bookKeys}
-        onCloseBook={handleCloseBook}
-        onGoToLibrary={handleCloseBooksToLibrary}
+        onCloseBook={onCloseBook}
+        onGoToLibrary={onCloseBooksToLibrary}
       />
       {isSettingsDialogOpen && <SettingsDialog bookKey={settingsDialogBookKey} />}
       <Notebook />

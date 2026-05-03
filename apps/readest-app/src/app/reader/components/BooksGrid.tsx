@@ -2,6 +2,7 @@ import clsx from 'clsx';
 import React, { useEffect, useState } from 'react';
 
 import { useEnv } from '@/context/EnvContext';
+import { useShallow } from 'zustand/react/shallow';
 import { useThemeStore } from '@/store/themeStore';
 import { useReaderStore } from '@/store/readerStore';
 import { useSidebarStore } from '@/store/sidebarStore';
@@ -34,8 +35,22 @@ const BooksGrid: React.FC<BooksGridProps> = ({ bookKeys, onCloseBook, onGoToLibr
   const _ = useTranslation();
   const { appService } = useEnv();
   const { getConfig, getBookData } = useBookDataStore();
-  const { getProgress, getViewState, getViewSettings } = useReaderStore();
-  const { setGridInsets, hoveredBookKey } = useReaderStore();
+  // BooksGrid is in the per-frame paint path (a parent of every visible
+  // FoliateViewer). Selector + useShallow keeps it from re-rendering on
+  // unrelated reader-store mutations such as progress / view-settings.
+  const { getProgress, getViewState, getViewSettings } = useReaderStore(
+    useShallow((s) => ({
+      getProgress: s.getProgress,
+      getViewState: s.getViewState,
+      getViewSettings: s.getViewSettings,
+    })),
+  );
+  const { setGridInsets, hoveredBookKey } = useReaderStore(
+    useShallow((s) => ({
+      setGridInsets: s.setGridInsets,
+      hoveredBookKey: s.hoveredBookKey,
+    })),
+  );
   const { sideBarBookKey } = useSidebarStore();
   const [dropdownOpenBook, setDropdownOpenBook] = useState<string>('');
 

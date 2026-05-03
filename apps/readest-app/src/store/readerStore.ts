@@ -26,6 +26,7 @@ import { useSettingsStore } from './settingsStore';
 import { BookData, useBookDataStore } from './bookDataStore';
 import { useLibraryStore } from './libraryStore';
 import { uniqueId } from '@/utils/misc';
+import { logger } from '@/utils/logger';
 
 interface ViewState {
   /* Unique key for each book view */
@@ -172,7 +173,7 @@ export const useReaderStore = create<ReaderStore>((set, get) => ({
       let bookDoc = bookData?.bookDoc;
       let file: File | null = bookData?.file ?? null;
       if (!bookDoc || (!isPseStream && !file) || reload) {
-        console.log('Loading book', key);
+        logger.debug('Loading book', key);
         if (isPseStream) {
           const data = parsePseStreamFileName(book.url!);
           const doc = await openPseStreamBook(data);

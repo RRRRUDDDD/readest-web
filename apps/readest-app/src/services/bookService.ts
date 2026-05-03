@@ -33,6 +33,7 @@ import { deserializeConfig, serializeConfig } from '@/utils/serializer';
 import { ClosableFile } from '@/utils/file';
 import { TxtToEpubConverter } from '@/utils/txt';
 import { svg2png } from '@/utils/svg';
+import { logger } from '@/utils/logger';
 import { normalizeMetadataIsbn } from '@/utils/isbn';
 import { BookFileNotFoundError } from './errors';
 import { fetch as tauriFetch } from '@tauri-apps/plugin-http';
@@ -402,7 +403,7 @@ export async function importBook(
       let cover = await loadedBook.getCover();
       if (cover?.type === 'image/svg+xml') {
         try {
-          console.log('Converting SVG cover to PNG...');
+          logger.debug('Converting SVG cover to PNG...');
           cover = await svg2png(cover);
         } catch {}
       }

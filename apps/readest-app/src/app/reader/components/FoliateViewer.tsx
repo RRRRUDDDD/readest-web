@@ -7,6 +7,7 @@ import { BookConfig, PageInfo } from '@/types/book';
 import { FoliateView, wrappedFoliateView } from '@/types/view';
 import { Insets } from '@/types/misc';
 import { useEnv } from '@/context/EnvContext';
+import { useShallow } from 'zustand/react/shallow';
 import { useThemeStore } from '@/store/themeStore';
 import { useReaderStore } from '@/store/readerStore';
 import { useBookDataStore } from '@/store/bookDataStore';
@@ -53,6 +54,7 @@ import {
   addLongPressListeners,
 } from '../utils/iframeEventHandlers';
 import { getMaxInlineSize } from '@/utils/config';
+import { logger } from '@/utils/logger';
 import { getDirFromUILanguage } from '@/utils/rtl';
 import { TransformContext } from '@/services/transformers/types';
 import { transformContent } from '@/services/transformService';
@@ -89,9 +91,31 @@ const FoliateViewer: React.FC<{
   const { themeCode, isDarkMode } = useThemeStore();
   const { settings } = useSettingsStore();
   const { loadFont, loadCustomFonts, getLoadedFonts, getAvailableFonts } = useCustomFontStore();
-  const { getView, setView: setFoliateView, setViewInited, setProgress } = useReaderStore();
+  // Hot-path subscription: pick only the actions/getters we use so renderer
+  // events (frequent setProgress / hover updates) don't re-render this
+  // viewer through unrelated store mutations.
+  const {
+    getView,
+    setView: setFoliateView,
+    setViewInited,
+    setProgress,
+  } = useReaderStore(
+    useShallow((s) => ({
+      getView: s.getView,
+      setView: s.setView,
+      setViewInited: s.setViewInited,
+      setProgress: s.setProgress,
+    })),
+  );
   const setPreviewMode = useReaderStore((s) => s.setPreviewMode);
-  const { getViewState, getProgress, getViewSettings, setViewSettings } = useReaderStore();
+  const { getViewState, getProgress, getViewSettings, setViewSettings } = useReaderStore(
+    useShallow((s) => ({
+      getViewState: s.getViewState,
+      getProgress: s.getProgress,
+      getViewSettings: s.getViewSettings,
+      setViewSettings: s.setViewSettings,
+    })),
+  );
   const { getParallels } = useParallelViewStore();
   const { getBookData } = useBookDataStore();
   const { applyBackgroundTexture } = useBackgroundTexture();
@@ -203,7 +227,7 @@ const FoliateViewer: React.FC<{
       setLoading(false); // Fixed layout doesn't emit 'stabilized' event
     }
     const detail = (event as CustomEvent).detail;
-    console.log('doc index loaded:', detail.index);
+    logger.debug('doc index loaded:', detail.index);
     if (detail.doc) {
       const renderer = viewRef.current?.renderer;
       const writingDir = renderer?.setStyles && getDirection(detail.doc);
@@ -455,10 +479,13 @@ const FoliateViewer: React.FC<{
     if (isViewCreated.current) return;
     isViewCreated.current = true;
 
-    setTimeout(() => setLoading(true), 200);
+    // Delay showing the spinner so a fast-loading book never flashes a
+    // loading state. The cleanup clears the timer if the component unmounts
+    // before the delay elapses, preventing a setState-after-unmount warning.
+    const loadingTimer = setTimeout(() => setLoading(true), 200);
 
     const openBook = async () => {
-      console.log('Opening book', bookKey);
+      logger.debug('Opening book', bookKey);
       await import('foliate-js/view.js');
       const view = wrappedFoliateView(document.createElement('foliate-view') as FoliateView);
       view.id = `foliate-view-${bookKey}`;
@@ -588,6 +615,9 @@ const FoliateViewer: React.FC<{
     };
 
     openBook();
+    return () => {
+      clearTimeout(loadingTimer);
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
