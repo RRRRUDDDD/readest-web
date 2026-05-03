@@ -3,7 +3,7 @@ import type { Transformer } from './types';
 export const whitespaceTransformer: Transformer = {
   name: 'whitespace',
 
-  transform: async (ctx) => {
+  transform: (ctx) => {
     const viewSettings = ctx.viewSettings;
     if (viewSettings.overrideLayout) {
       const cleaned = ctx.content

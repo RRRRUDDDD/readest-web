@@ -4,7 +4,7 @@ import type { Transformer } from './types';
 export const languageTransformer: Transformer = {
   name: 'language',
 
-  transform: async (ctx) => {
+  transform: (ctx) => {
     const primaryLanguage = ctx.primaryLanguage;
     let result = ctx.content;
     const attrsMatch = result.match(/<html\b([^>]*)>/i);

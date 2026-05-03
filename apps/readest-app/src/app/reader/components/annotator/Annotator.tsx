@@ -4,6 +4,7 @@ import { RiDeleteBinLine } from 'react-icons/ri';
 import * as CFI from 'foliate-js/epubcfi.js';
 import { Overlayer } from 'foliate-js/overlayer.js';
 import { useEnv } from '@/context/EnvContext';
+import { useShallow } from 'zustand/react/shallow';
 import { BookNote, BooknoteGroup, HighlightColor, HighlightStyle } from '@/types/book';
 import { NOTE_PREFIX } from '@/types/view';
 import { NativeTouchEventType } from '@/types/system';
@@ -53,7 +54,18 @@ const Annotator: React.FC<{ bookKey: string }> = ({ bookKey }) => {
   const { settings } = useSettingsStore();
   const { isDarkMode } = useThemeStore();
   const { getConfig, saveConfig, getBookData, updateBooknotes } = useBookDataStore();
-  const { getProgress, getView, getViewsById, getViewSettings } = useReaderStore();
+  // Annotator is mounted per book and re-runs 8 effects on re-render. Without
+  // selector subscriptions every reader-store mutation (per-page setProgress,
+  // hover toggles, view-settings writes) would re-render this whole component
+  // and re-fire its effects. Pick only the action getters we use.
+  const { getProgress, getView, getViewsById, getViewSettings } = useReaderStore(
+    useShallow((s) => ({
+      getProgress: s.getProgress,
+      getView: s.getView,
+      getViewsById: s.getViewsById,
+      getViewSettings: s.getViewSettings,
+    })),
+  );
   const { setNotebookVisible, setNotebookNewAnnotation } = useNotebookStore();
   const { listenToNativeTouchEvents } = useDeviceControlStore();
   const { loadCustomDictionaries } = useCustomDictionaryStore();
@@ -604,9 +616,16 @@ const Annotator: React.FC<{ bookKey: string }> = ({ bookKey }) => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selection, bookKey]);
 
+  // Track the last location we already drew annotations for. The progress
+  // object is rebuilt on every page-turn (new reference) so depending on it
+  // alone caused this effect — and the per-annotation Promise.all chain
+  // inside — to run on every page even when nothing relevant changed.
+  const lastDrawnLocationRef = useRef<string | null>(null);
   useEffect(() => {
     if (!progress) return;
     const { location } = progress;
+    if (!location || lastDrawnLocationRef.current === location) return;
+    lastDrawnLocationRef.current = location;
     const { booknotes = [] } = config;
     const annotations = booknotes.filter(
       (item) =>
@@ -632,7 +651,7 @@ const Annotator: React.FC<{ bookKey: string }> = ({ bookKey }) => {
       console.warn(e);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [progress]);
+  }, [progress?.location]);
 
   useEffect(() => {
     if (!config.booknotes || !selection?.cfi || !showAnnotationNotes) return;

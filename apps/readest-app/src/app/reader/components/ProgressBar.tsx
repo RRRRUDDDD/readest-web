@@ -3,6 +3,7 @@ import React, { useEffect, useState } from 'react';
 import { Trans } from 'react-i18next';
 import { Insets } from '@/types/misc';
 import { useEnv } from '@/context/EnvContext';
+import { useShallow } from 'zustand/react/shallow';
 import { useReaderStore } from '@/store/readerStore';
 import { useTranslation } from '@/hooks/useTranslation';
 import { useBookDataStore } from '@/store/bookDataStore';
@@ -28,7 +29,16 @@ const ProgressBar: React.FC<ProgressBarProps> = ({
   const _ = useTranslation();
   const { envConfig, appService } = useEnv();
   const { getBookData } = useBookDataStore();
-  const { getProgress, getViewSettings, getView } = useReaderStore();
+  // ProgressBar updates per page-turn but is mounted in every grid cell.
+  // Subscribe via selectors so unrelated reader-store mutations (hover,
+  // view-settings writes) don't re-render us.
+  const { getProgress, getViewSettings, getView } = useReaderStore(
+    useShallow((s) => ({
+      getProgress: s.getProgress,
+      getViewSettings: s.getViewSettings,
+      getView: s.getView,
+    })),
+  );
   const view = getView(bookKey);
   const bookData = getBookData(bookKey);
   const viewSettings = getViewSettings(bookKey)!;

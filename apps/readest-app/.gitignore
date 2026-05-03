@@ -70,4 +70,5 @@ src-tauri/gen
 .context/
 .claude/settings.local.json
 .claude/skills
+.claude/plan/
 

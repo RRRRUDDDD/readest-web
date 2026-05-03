@@ -2,6 +2,7 @@ import clsx from 'clsx';
 import React from 'react';
 import { Insets } from '@/types/misc';
 import { useEnv } from '@/context/EnvContext';
+import { useShallow } from 'zustand/react/shallow';
 import { useThemeStore } from '@/store/themeStore';
 import { useReaderStore } from '@/store/readerStore';
 import { useTranslation } from '@/hooks/useTranslation';
@@ -31,7 +32,15 @@ const SectionInfo: React.FC<SectionInfoProps> = ({
 }) => {
   const _ = useTranslation();
   const { appService } = useEnv();
-  const { hoveredBookKey, getView, setHoveredBookKey } = useReaderStore();
+  // Mounted in every grid cell; renders on hover/section changes only. Pick
+  // the few fields we read so per-page setProgress doesn't re-render us.
+  const { hoveredBookKey, getView, setHoveredBookKey } = useReaderStore(
+    useShallow((s) => ({
+      hoveredBookKey: s.hoveredBookKey,
+      getView: s.getView,
+      setHoveredBookKey: s.setHoveredBookKey,
+    })),
+  );
   const { systemUIVisible, statusBarHeight } = useThemeStore();
   const topInset = Math.max(
     gridInsets.top,

@@ -126,7 +126,7 @@ const WARICHU_ELEMENT_REGEX = /<warichu(?:\s[^>]*)?>([\s\S]*?)<\/warichu>/gi;
 
 export const warichuTransformer: Transformer = {
   name: 'warichu',
-  transform: async (ctx) => {
+  transform: (ctx) => {
     let result = ctx.content;
     if (!/warichuu?|<warichu/i.test(result)) return result;
 

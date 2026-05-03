@@ -205,7 +205,7 @@ function getTextNodes(doc: Document): Text[] {
 export const proofreadTransformer: Transformer = {
   name: 'proofread',
 
-  transform: async (ctx, options) => {
+  transform: (ctx, options) => {
     const { docType = 'text/html', onlyForTTS = false } =
       (options as {
         docType?: DOMParserSupportedType;

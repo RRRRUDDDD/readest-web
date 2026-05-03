@@ -36,7 +36,7 @@ const quotationsMapHans2Hant = {
 export const punctuationTransformer: Transformer = {
   name: 'punctuation',
 
-  transform: async (ctx) => {
+  transform: (ctx) => {
     if (!ctx.viewSettings.replaceQuotationMarks) return ctx.content;
 
     let result = ctx.content;

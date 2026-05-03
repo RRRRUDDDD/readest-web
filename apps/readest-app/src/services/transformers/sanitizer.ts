@@ -9,7 +9,7 @@ const DOCTYPE_XHTML11 = `<!DOCTYPE html PUBLIC
 export const sanitizerTransformer: Transformer = {
   name: 'sanitizer',
 
-  transform: async (ctx) => {
+  transform: (ctx) => {
     const allowScript = ctx.viewSettings.allowScript;
     if (allowScript) return ctx.content;
 
