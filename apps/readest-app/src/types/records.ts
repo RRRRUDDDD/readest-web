@@ -4,13 +4,13 @@ export interface DBBook {
   meta_hash?: string;
   format: string;
   title: string;
-  source_title?: string;
+  source_title?: string | null;
   author: string;
   group_id?: string | null;
   group_name?: string | null;
-  tags?: string[];
-  progress?: [number, number];
-  reading_status?: string;
+  tags?: string[] | null;
+  progress?: [number, number] | null;
+  reading_status?: string | null;
 
   metadata?: string | null;
   created_at?: string;

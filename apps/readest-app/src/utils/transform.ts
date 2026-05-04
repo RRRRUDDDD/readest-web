@@ -17,6 +17,18 @@ const parseJsonish = <T>(value: unknown): T | undefined => {
   return value as T;
 };
 
+/**
+ * Replace `undefined` with `null` so the value survives JSON serialization
+ * in upsert payloads. PostgREST's "ON CONFLICT DO UPDATE" only updates
+ * columns present in the INSERT list — without explicit `null` here a
+ * cleared field would silently retain its stale server-side value, and
+ * the next pull would bring that stale value back.
+ *
+ * Used by transformBookToDB on every nullable book column.
+ */
+export const nullifyUndefined = <T>(value: T | undefined): T | null =>
+  value === undefined ? null : value;
+
 export const transformBookConfigToDB = (bookConfig: unknown, userId: string): DBBookConfig => {
   const {
     bookHash,
@@ -96,18 +108,18 @@ export const transformBookToDB = (book: unknown, userId: string): DBBook => {
     format,
     title: sanitizeString(title)!,
     author: sanitizeString(author)!,
-    // Use `?? null` so cleared fields are propagated to the server. Without
-    // this, JSON.stringify would drop undefined values from the upsert
-    // payload — and PostgREST's "ON CONFLICT DO UPDATE" only updates
-    // columns present in the INSERT list, so the server-side group_id /
-    // group_name would silently retain their old values. The next pull
-    // would then bring those stale values back, undoing "Remove From Group".
-    group_id: groupId ?? null,
-    group_name: sanitizeString(groupName) ?? null,
-    tags: tags,
-    progress: progress,
-    reading_status: readingStatus,
-    source_title: sanitizeString(sourceTitle),
+    // All nullable columns go through nullifyUndefined so cleared fields
+    // are propagated to the server as explicit `null`. JSON.stringify
+    // would otherwise drop undefined keys, PostgREST's ON CONFLICT
+    // DO UPDATE would skip those columns, and the next pull would bring
+    // the stale values back — silently undoing user actions like
+    // "Remove From Group" or clearing a reading status.
+    group_id: nullifyUndefined(groupId),
+    group_name: nullifyUndefined(sanitizeString(groupName)),
+    tags: nullifyUndefined(tags),
+    progress: nullifyUndefined(progress),
+    reading_status: nullifyUndefined(readingStatus),
+    source_title: nullifyUndefined(sanitizeString(sourceTitle)),
     metadata: metadata ? sanitizeString(JSON.stringify(metadata)) : null,
     created_at: new Date(createdAt ?? Date.now()).toISOString(),
     updated_at: new Date(updatedAt ?? Date.now()).toISOString(),
@@ -143,15 +155,15 @@ export const transformBookFromDB = (dbBook: DBBook): Book => {
     title,
     author,
     // Normalize null back to undefined so internal Book objects stay
-    // consistent with the type (groupId / groupName are `string | undefined`).
-    // The DB schema allows null because we explicitly write null on clear
-    // (see transformBookToDB) so PostgREST UPSERT actually wipes the column.
+    // consistent with their declared types (groupId / tags / progress /
+    // etc are `… | undefined`, never null). The DB schema allows null
+    // because we explicitly write null on clear (see transformBookToDB).
     groupId: group_id ?? undefined,
     groupName: group_name ?? undefined,
-    tags: tags,
-    progress: progress,
-    readingStatus: reading_status as ReadingStatus,
-    sourceTitle: source_title,
+    tags: tags ?? undefined,
+    progress: progress ?? undefined,
+    readingStatus: (reading_status ?? undefined) as ReadingStatus | undefined,
+    sourceTitle: source_title ?? undefined,
     metadata: parseJsonish(metadata),
     createdAt: new Date(created_at!).getTime(),
     updatedAt: new Date(updated_at!).getTime(),

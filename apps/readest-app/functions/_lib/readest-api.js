@@ -117,6 +117,15 @@ export function canStoreFile(env, token, fileSize) {
   };
 }
 
+/**
+ * Replace `undefined` with `null` so the value survives JSON serialization
+ * in upsert payloads. PostgREST's "ON CONFLICT DO UPDATE" only updates
+ * columns present in the INSERT list — without explicit `null` here a
+ * cleared field would silently retain its stale server-side value, and
+ * the next pull would bring that stale value back.
+ */
+const nullifyUndefined = (value) => (value === undefined ? null : value);
+
 export function transformBookToDB(book, userId) {
   return {
     user_id: userId,
@@ -125,18 +134,18 @@ export function transformBookToDB(book, userId) {
     format: book.format,
     title: book.title || '',
     author: book.author || '',
-    // Use `?? null` so cleared fields are propagated to the server. Without
-    // this, JSON.stringify would drop undefined values from the upsert
-    // payload — and PostgREST's "ON CONFLICT DO UPDATE" only updates
-    // columns present in the INSERT list, so the server-side group_id /
-    // group_name would silently retain their old values. The next pull
-    // would then bring those stale values back, undoing "Remove From Group".
-    group_id: book.groupId ?? null,
-    group_name: book.groupName ?? null,
-    tags: book.tags,
-    progress: book.progress,
-    reading_status: book.readingStatus,
-    source_title: book.sourceTitle,
+    // All nullable columns go through nullifyUndefined so cleared fields
+    // are propagated to the server as explicit `null`. JSON.stringify
+    // would otherwise drop undefined keys, PostgREST's ON CONFLICT
+    // DO UPDATE would skip those columns, and the next pull would bring
+    // the stale values back — silently undoing user actions like
+    // "Remove From Group" or clearing a reading status.
+    group_id: nullifyUndefined(book.groupId),
+    group_name: nullifyUndefined(book.groupName),
+    tags: nullifyUndefined(book.tags),
+    progress: nullifyUndefined(book.progress),
+    reading_status: nullifyUndefined(book.readingStatus),
+    source_title: nullifyUndefined(book.sourceTitle),
     metadata: book.metadata || null,
     created_at: new Date(book.createdAt || Date.now()).toISOString(),
     updated_at: new Date(book.updatedAt || Date.now()).toISOString(),

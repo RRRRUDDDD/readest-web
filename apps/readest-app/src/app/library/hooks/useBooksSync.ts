@@ -116,8 +116,14 @@ export const useBooksSync = () => {
         if (!matchingBook.deletedAt && matchingBook.uploadedAt && !oldBook.coverDownloadedAt) {
           oldBook.coverImageUrl = await appService?.generateCoverImageUrl(oldBook);
         }
+        // Strict greater-than: when timestamps tie (typical right after a
+        // local push, since the server echoes back what we just sent) the
+        // local copy wins. Using `>=` here would let the freshly-pulled
+        // server record clobber the local change we *just* made — for
+        // example a "Remove From Group" with a redundant null group_id
+        // round-trip would silently revert.
         const mergedBook =
-          matchingBook.updatedAt >= oldBook.updatedAt
+          matchingBook.updatedAt > oldBook.updatedAt
             ? { ...oldBook, ...matchingBook, syncedAt: Date.now() }
             : { ...matchingBook, ...oldBook, syncedAt: Date.now() };
         return mergedBook;
