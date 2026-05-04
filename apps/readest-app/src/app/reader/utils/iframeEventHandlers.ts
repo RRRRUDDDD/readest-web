@@ -446,6 +446,10 @@ export const addLongPressListeners = (bookKey: string, doc: Document) => {
   };
 
   const processElements = () => {
+    // Track per-element cleanups so the outer cleanup can removeEventListener
+    // on every wired element. Without this the listeners survive past the
+    // owning viewer's teardown — see .claude/plan/b2-b3-codex-fixes.md L4
+    // and B2-5 plan for context.
     const addLongPressListeners = (el: Element) => {
       if (el.hasAttribute('data-long-press-added')) return;
       el.setAttribute('data-long-press-added', 'true');
@@ -456,6 +460,18 @@ export const addLongPressListeners = (bookKey: string, doc: Document) => {
       el.addEventListener('touchstart', startPress, { passive: true });
       el.addEventListener('touchmove', handleMove, { passive: true });
       el.addEventListener('touchend', cancelPress);
+      elementCleanups.push(() => {
+        el.removeEventListener('mousedown', startPress);
+        el.removeEventListener('mousemove', handleMove);
+        el.removeEventListener('mouseup', cancelPress);
+        el.removeEventListener('mouseleave', cancelPress);
+        el.removeEventListener('touchstart', startPress);
+        el.removeEventListener('touchmove', handleMove);
+        el.removeEventListener('touchend', cancelPress);
+        // Clear the marker so the element can be re-wired by a fresh
+        // viewer setup if it happens to be reused.
+        el.removeAttribute('data-long-press-added');
+      });
     };
 
     doc.querySelectorAll('img, table').forEach(addLongPressListeners);
@@ -463,6 +479,10 @@ export const addLongPressListeners = (bookKey: string, doc: Document) => {
       if (svg.querySelector('image')) addLongPressListeners(svg);
     });
   };
+
+  // Element-level cleanups accumulate via processElements(). The outer
+  // cleanup below drains this array and calls each one.
+  const elementCleanups: Array<() => void> = [];
 
   processElements();
 
@@ -478,5 +498,18 @@ export const addLongPressListeners = (bookKey: string, doc: Document) => {
   return () => {
     observer.disconnect();
     pressTimers.forEach((timer) => clearTimeout(timer));
+    pressTimers.clear();
+    pressStartPositions.clear();
+    // Drain element cleanups. Wrapping each in try/catch so a single
+    // detached element (where removeEventListener might still succeed but
+    // a future hook could throw) cannot block the rest.
+    for (const cleanup of elementCleanups) {
+      try {
+        cleanup();
+      } catch {
+        // Ignore — element may already be detached; nothing actionable.
+      }
+    }
+    elementCleanups.length = 0;
   };
 };

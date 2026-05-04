@@ -17,6 +17,7 @@ import { useParallelViewStore } from '@/store/parallelViewStore';
 import { useMouseEvent, useTouchEvent, useLongPressEvent } from '../hooks/useIframeEvents';
 import { usePagination, viewPagination } from '../hooks/usePagination';
 import { useFoliateEvents } from '../hooks/useFoliateEvents';
+import { createDisposerRegistry } from '../utils/disposerRegistry';
 import { useProgressSync } from '../hooks/useProgressSync';
 import { useProgressAutoSave } from '../hooks/useProgressAutoSave';
 import { useBackgroundTexture } from '@/hooks/useBackgroundTexture';
@@ -127,6 +128,10 @@ const FoliateViewer: React.FC<{
   const viewRef = useRef<FoliateView | null>(null);
   const containerRef = useRef<HTMLDivElement | null>(null);
   const isViewCreated = useRef(false);
+  // Disposers accumulated during viewer setup AND during docLoadHandler
+  // (the long-press cleanup is registered there, not in the effect body).
+  // Drained in the viewer-creation effect's cleanup.
+  const viewerDisposersRef = useRef(createDisposerRegistry());
   const doubleClickDisabled = useRef(!!viewSettings?.disableDoubleClick);
   const [toastMessage, setToastMessage] = useState('');
   const [loading, setLoading] = useState(false);
@@ -322,7 +327,11 @@ const FoliateViewer: React.FC<{
         detail.doc.addEventListener('touchstart', handleTouchStart.bind(null, bookKey));
         detail.doc.addEventListener('touchmove', handleTouchMove.bind(null, bookKey));
         detail.doc.addEventListener('touchend', handleTouchEnd.bind(null, bookKey));
-        addLongPressListeners(bookKey, detail.doc);
+        // The long-press setup returns a cleanup that removes element-level
+        // listeners and disconnects its MutationObserver — register it so
+        // viewer teardown drops them all at once.
+        const longPressCleanup = addLongPressListeners(bookKey, detail.doc);
+        viewerDisposersRef.current.add(longPressCleanup);
       }
     }
   };
@@ -484,6 +493,11 @@ const FoliateViewer: React.FC<{
     // before the delay elapses, preventing a setState-after-unmount warning.
     const loadingTimer = setTimeout(() => setLoading(true), 200);
 
+    // Use the shared component-scope registry so cleanup hooks registered
+    // from inside docLoadHandler (e.g. addLongPressListeners) and ones
+    // registered from this effect body all drain together. See B2-5 plan.
+    const registry = viewerDisposersRef.current;
+
     const openBook = async () => {
       logger.debug('Opening book', bookKey);
       await import('foliate-js/view.js');
@@ -516,7 +530,10 @@ const FoliateViewer: React.FC<{
 
       const { book } = view;
 
-      book.transformTarget?.addEventListener('load', async (event: Event) => {
+      // Define handlers as named locals so we can pair add/remove via the
+      // registry. Inline arrow handlers passed straight to addEventListener
+      // would be impossible to remove later.
+      const transformLoadHandler = async (event: Event) => {
         const { detail } = event as CustomEvent<{
           isScript: boolean;
           type: string;
@@ -542,12 +559,16 @@ const FoliateViewer: React.FC<{
             }
           });
         }
-      });
+      };
+      book.transformTarget?.addEventListener('load', transformLoadHandler);
+      registry.add(() => book.transformTarget?.removeEventListener('load', transformLoadHandler));
       const viewWidth = appService?.isMobile ? screen.width : window.innerWidth;
       const viewHeight = appService?.isMobile ? screen.height : window.innerHeight;
       const width = viewWidth - insets.left - insets.right;
       const height = viewHeight - insets.top - insets.bottom;
-      book.transformTarget?.addEventListener('data', getDocTransformHandler({ width, height }));
+      const transformDataHandler = getDocTransformHandler({ width, height });
+      book.transformTarget?.addEventListener('data', transformDataHandler);
+      registry.add(() => book.transformTarget?.removeEventListener('data', transformDataHandler));
       view.renderer.setStyles?.(getStyles(viewSettings));
       applyTranslationStyle(viewSettings);
 
@@ -617,6 +638,7 @@ const FoliateViewer: React.FC<{
     openBook();
     return () => {
       clearTimeout(loadingTimer);
+      registry.dispose();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
