@@ -1,5 +1,6 @@
 import { BookFormat } from '@/types/book';
 import { Collection, Contributor, Identifier, LanguageMap } from '@/utils/book';
+import { logger } from '@/utils/logger';
 import { configureZip } from '@/utils/zip';
 import * as epubcfi from 'foliate-js/epubcfi.js';
 
@@ -192,8 +193,15 @@ export class DocumentLoader {
       !entry.directory ? entry.getData(new BlobWriter(type!)) : null,
     );
     const getSize = (name: string) => getEntry(name)?.uncompressedSize ?? 0;
+    // Expose close so DocumentLoader.open() can register the ZipReader as a
+    // disposer and release it when the BookData record is cleared. Without
+    // this the ZipReader stayed alive for the lifetime of the page, leaking
+    // its internal stream handles (see .claude/plan/b2-b3-codex-fixes.md L1).
+    const close = async () => {
+      await reader.close();
+    };
 
-    return { entries, loadText, loadBlob, getSize, getComment, sha1: undefined };
+    return { entries, loadText, loadBlob, getSize, getComment, sha1: undefined, close };
   }
 
   private isCBZ(): boolean {
@@ -221,16 +229,53 @@ export class DocumentLoader {
     );
   }
 
-  public async open(): Promise<{ book: BookDoc; format: BookFormat }> {
+  public async open(): Promise<{
+    book: BookDoc;
+    format: BookFormat;
+    /**
+     * Release every resource acquired during open() — currently the
+     * ZipReader created for EPUB/CBZ/FBZ formats. Idempotent: a second
+     * call is a no-op. Errors raised by individual disposers are logged
+     * via `logger.warn` and never propagate, so callers can `await
+     * dispose()` from a `finally` block without masking the original
+     * use-error.
+     *
+     * Non-zip formats (PDF, MOBI, FB2 root) currently register no
+     * disposers — their underlying readers (pdfjs / mobi.js fflate) are
+     * either GC-managed or owned by foliate-js, not the project.
+     */
+    dispose: () => Promise<void>;
+  }> {
     let book = null;
     let format: BookFormat = 'EPUB';
     if (!this.file.size) {
       throw new Error('File is empty');
     }
+    // Disposers are gathered as the open path produces resources. They run
+    // in LIFO order on dispose() so later resources release before earlier
+    // ones (mirrors stack-style ownership). See B2-2 disposerRegistry for
+    // the same convention.
+    const disposers: Array<() => Promise<void> | void> = [];
+    let disposed = false;
+    const dispose = async (): Promise<void> => {
+      if (disposed) return;
+      disposed = true;
+      for (let i = disposers.length - 1; i >= 0; i--) {
+        try {
+          await disposers[i]!();
+        } catch (e) {
+          logger.warn('DocumentLoader: dispose step failed', e);
+        }
+      }
+    };
     try {
       if ((await this.isZip()) || this.isEPUB()) {
         const loader = await this.makeZipLoader();
         const { entries } = loader;
+        // Register the ZipReader for release before we hand the loader to
+        // any consumer. Even if EPUB(loader).init() throws below, dispose()
+        // will still close the underlying reader.
+        disposers.push(() => loader.close());
 
         if (this.isCBZ()) {
           const { makeComicBook } = await import('foliate-js/comic-book.js');
@@ -272,13 +317,20 @@ export class DocumentLoader {
         format = 'FB2';
       }
     } catch (e: unknown) {
+      // Release any resources acquired before the failure. Without this,
+      // a failed EPUB(loader).init() would leak the ZipReader.
+      await dispose();
       console.error('Failed to open document:', e);
       if (e instanceof Error && e.message?.includes('not a valid zip')) {
         throw new Error('Unsupported or corrupted book file');
       }
       throw e;
     }
-    return { book, format } as { book: BookDoc; format: BookFormat };
+    return { book, format, dispose } as {
+      book: BookDoc;
+      format: BookFormat;
+      dispose: () => Promise<void>;
+    };
   }
 }
 

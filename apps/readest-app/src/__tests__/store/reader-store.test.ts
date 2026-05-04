@@ -8,6 +8,10 @@ vi.mock('@/store/bookDataStore', async () => {
   return {
     useBookDataStore: create(() => ({
       booksData: {} as Record<string, unknown>,
+      // After B2-3, readerStore.clearViewState calls clearBookData when
+      // the last view for a book id is removed. The mock must expose this
+      // function so the existing readerStore tests don't crash.
+      clearBookData: vi.fn(),
     })),
   };
 });

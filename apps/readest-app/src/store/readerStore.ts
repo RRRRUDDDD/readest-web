@@ -27,6 +27,7 @@ import { BookData, useBookDataStore } from './bookDataStore';
 import { useLibraryStore } from './libraryStore';
 import { uniqueId } from '@/utils/misc';
 import { logger } from '@/utils/logger';
+import { createLoadSessionGuard } from '@/app/reader/utils/loadSession';
 
 interface ViewState {
   /* Unique key for each book view */
@@ -98,210 +99,85 @@ interface ReaderStore {
   recreateViewer: (envConfig: EnvConfigType, key: string) => void;
 }
 
-export const useReaderStore = create<ReaderStore>((set, get) => ({
-  viewStates: {},
-  bookKeys: [],
-  hoveredBookKey: null,
-  setBookKeys: (keys: string[]) => set({ bookKeys: keys }),
-  setHoveredBookKey: (key: string | null) => set({ hoveredBookKey: key }),
-  getView: (key: string | null) => (key && get().viewStates[key]?.view) || null,
-  setView: (key: string, view) =>
-    set((state) => ({
-      viewStates: {
-        ...state.viewStates,
-        [key]: { ...state.viewStates[key]!, view },
-      },
-    })),
-  getViews: () => Object.values(get().viewStates).map((state) => state.view!),
-  getViewsById: (id: string) => {
-    const { viewStates } = get();
-    return Object.values(viewStates)
-      .filter((state) => state.key && state.key.startsWith(id))
-      .map((state) => state.view!);
-  },
+export const useReaderStore = create<ReaderStore>((set, get) => {
+  // Per-bookKey monotonic guard for cancelling in-flight initViewState
+  // chains. Lives in the store closure so every initViewState/clearViewState
+  // pair shares the same instance — see B2-4 plan
+  // (.claude/plan/b2-4-load-session.md) for the race scenarios this fixes.
+  const loadSessionGuard = createLoadSessionGuard();
 
-  clearViewState: (key: string) => {
-    set((state) => {
-      const viewStates = { ...state.viewStates };
-      delete viewStates[key];
-      return { viewStates };
-    });
-  },
-  getViewState: (key: string) => get().viewStates[key] || null,
-  initViewState: async (
-    envConfig: EnvConfigType,
-    id: string,
-    key: string,
-    isPrimary = true,
-    reload = false,
-  ) => {
-    const booksData = useBookDataStore.getState().booksData;
-    const bookData = booksData[id];
-    set((state) => ({
-      viewStates: {
-        ...state.viewStates,
-        [key]: {
-          key: '',
-          view: null,
-          viewerKey: '',
-          isPrimary: false,
-          loading: true,
-          inited: false,
-          error: null,
-          progress: null,
-          ribbonVisible: false,
-          ttsEnabled: false,
-          syncing: false,
-          gridInsets: null,
-          previewMode: false,
-          viewSettings: null,
+  return {
+    viewStates: {},
+    bookKeys: [],
+    hoveredBookKey: null,
+    setBookKeys: (keys: string[]) => set({ bookKeys: keys }),
+    setHoveredBookKey: (key: string | null) => set({ hoveredBookKey: key }),
+    getView: (key: string | null) => (key && get().viewStates[key]?.view) || null,
+    setView: (key: string, view) =>
+      set((state) => ({
+        viewStates: {
+          ...state.viewStates,
+          [key]: { ...state.viewStates[key]!, view },
         },
-      },
-    }));
-    try {
-      const appService = await envConfig.getAppService();
-      const { settings } = useSettingsStore.getState();
-      const { getBookByHash, library } = useLibraryStore.getState();
-      const book = getBookByHash(id);
-      if (!book) {
-        console.error(
-          `Book ${id} not found in library (size=${library.length}); likely the in-memory entry was dropped by a library reload.`,
-        );
-        throw new Error('Book not found');
-      }
-      const isPseStream = !!book.url && isPseStreamFileName(book.url);
-      let bookDoc = bookData?.bookDoc;
-      let file: File | null = bookData?.file ?? null;
-      if (!bookDoc || (!isPseStream && !file) || reload) {
-        logger.debug('Loading book', key);
-        if (isPseStream) {
-          const data = parsePseStreamFileName(book.url!);
-          const doc = await openPseStreamBook(data);
-          bookDoc = doc.book;
-          file = null;
-        } else {
-          const content = (await appService.loadBookContent(book)) as BookContent;
-          file = content.file;
-          const doc = await new DocumentLoader(file).open();
-          bookDoc = doc.book;
-        }
-      }
-      const config = await appService.loadBookConfig(book, settings);
-      // Import annotations from third-party readers on first open
-      if (bookDoc.metadata.identifier) {
-        const { getAnnotationProviders } = await import('@/services/annotation');
-        for (const provider of getAnnotationProviders()) {
-          if (provider.isAvailable(appService)) {
-            const merged = await provider.importAnnotations(
-              appService,
-              bookDoc.metadata.identifier,
-              config,
-            );
-            if (merged !== config) {
-              Object.assign(config, merged);
-              await appService.saveBookConfig(book, config, settings);
-            }
-          }
-        }
-      }
-      // Filter out invalid booknotes
-      config.booknotes = config.booknotes?.filter((booknote) => booknote.cfi) ?? [];
-      // Load cached book navigation (TOC + section fragments) or compute and persist.
-      if (book.format === 'EPUB' && bookDoc.rendition?.layout !== 'pre-paginated') {
-        const cachedNav = await appService.loadBookNav(book);
-        if (cachedNav?.version === BOOK_NAV_VERSION && process.env.NODE_ENV === 'production') {
-          hydrateBookNav(bookDoc, cachedNav);
-        } else {
-          const freshNav = await computeBookNav(bookDoc);
-          hydrateBookNav(bookDoc, freshNav);
-          try {
-            await appService.saveBookNav(book, freshNav);
-          } catch (e) {
-            console.warn('Failed to persist book nav cache:', e);
-          }
-        }
-      }
-      await updateToc(
-        bookDoc,
-        config.viewSettings?.sortedTOC ?? false,
-        config.viewSettings?.convertChineseVariant ?? 'none',
+      })),
+    getViews: () => Object.values(get().viewStates).map((state) => state.view!),
+    getViewsById: (id: string) => {
+      const { viewStates } = get();
+      return Object.values(viewStates)
+        .filter((state) => state.key && state.key.startsWith(id))
+        .map((state) => state.view!);
+    },
+
+    clearViewState: (key: string) => {
+      // Invalidate any in-flight initViewState for this key. The init body
+      // gates each set() behind isCurrent(key, ticket); after cancel, every
+      // outstanding ticket reports false so stale awaits become no-ops and
+      // the ghost-view bug from B2-4 P0-② cannot occur.
+      loadSessionGuard.cancel(key);
+
+      const id = key.split('-')[0]!;
+      set((state) => {
+        const viewStates = { ...state.viewStates };
+        delete viewStates[key];
+        return { viewStates };
+      });
+      // After delete, check whether any sibling view still references the
+      // same book id. If not, release the BookData record and the resources
+      // it owns (BookDoc dispose, File close). The sibling check uses
+      // `${id}-` to avoid matching unrelated ids that share a prefix.
+      const stillOpen = Object.values(get().viewStates).some(
+        (s) => s.key && s.key.startsWith(`${id}-`),
       );
-      if (!bookDoc.metadata.title && file) {
-        bookDoc.metadata.title = getBaseFilename(file.name);
+      if (!stillOpen) {
+        useBookDataStore.getState().clearBookData(id);
       }
-      book.sourceTitle = formatTitle(bookDoc.metadata.title);
-      // Correct language codes mistakenly set with language names
-      if (typeof bookDoc.metadata?.language === 'string') {
-        if (bookDoc.metadata.language in SUPPORTED_LANGNAMES) {
-          bookDoc.metadata.language = SUPPORTED_LANGNAMES[bookDoc.metadata.language]!;
-        }
-      }
-      // Set the book's language for formerly imported books, newly imported books have this field set
-      const primaryLanguage = getPrimaryLanguage(bookDoc.metadata.language);
-      book.primaryLanguage = book.primaryLanguage ?? primaryLanguage;
-      book.metadata = book.metadata ?? bookDoc.metadata;
-
-      // Update series info from metadata if available and not already set on the book
-      if (bookDoc.metadata.belongsTo?.series) {
-        const belongsTo = bookDoc.metadata.belongsTo.series;
-        const series = Array.isArray(belongsTo) ? belongsTo[0] : belongsTo;
-        if (series) {
-          book.metadata.series = book.metadata.series ?? formatTitle(series.name);
-          book.metadata.seriesIndex =
-            book.metadata.seriesIndex ?? parseFloat(series.position || '0');
-        }
-      }
-      // TODO: uncomment this when we can ensure metaHash is correctly generated for all books
-      // book.metaHash = book.metaHash ?? getMetadataHash(bookDoc.metadata);
-      book.metaHash = getMetadataHash(bookDoc.metadata);
-
-      const isFixedLayout =
-        bookDoc.rendition?.layout === 'pre-paginated' || FIXED_LAYOUT_FORMATS.has(book.format);
-      const newBookData: BookData = { id, book, file, config, bookDoc, isFixedLayout };
-      useBookDataStore.setState((state) => ({
-        booksData: {
-          ...state.booksData,
-          [id]: newBookData,
-        },
-      }));
-      const configViewSettings = config.viewSettings!;
-      const globalViewSettings = settings.globalViewSettings;
+    },
+    getViewState: (key: string) => get().viewStates[key] || null,
+    initViewState: async (
+      envConfig: EnvConfigType,
+      id: string,
+      key: string,
+      isPrimary = true,
+      reload = false,
+    ) => {
+      // Issue a fresh ticket for this key. Every set() in the body below is
+      // gated by isCurrent(key, ticket) — if clearViewState (or another
+      // initViewState for the same key) supersedes us mid-load, our writes
+      // become no-ops. See B2-4 P0-②.
+      const ticket = loadSessionGuard.next(key);
+      const booksData = useBookDataStore.getState().booksData;
+      const bookData = booksData[id];
       set((state) => ({
         viewStates: {
           ...state.viewStates,
           [key]: {
-            ...state.viewStates[key],
-            key,
-            view: null,
-            viewerKey: `${key}-${uniqueId()}`,
-            isPrimary,
-            loading: false,
-            inited: false,
-            error: null,
-            progress: null,
-            ribbonVisible: false,
-            ttsEnabled: false,
-            syncing: false,
-            gridInsets: null,
-            previewMode: false,
-            viewSettings: { ...globalViewSettings, ...configViewSettings },
-          },
-        },
-      }));
-    } catch (error) {
-      console.error(error);
-      set((state) => ({
-        viewStates: {
-          ...state.viewStates,
-          [key]: {
-            ...state.viewStates[key],
             key: '',
             view: null,
             viewerKey: '',
             isPrimary: false,
-            loading: false,
+            loading: true,
             inited: false,
-            error: 'Failed to load book.',
+            error: null,
             progress: null,
             ribbonVisible: false,
             ttsEnabled: false,
@@ -312,206 +188,400 @@ export const useReaderStore = create<ReaderStore>((set, get) => ({
           },
         },
       }));
-      throw error;
-    }
-  },
-  getViewSettings: (key: string) => get().viewStates[key]?.viewSettings || null,
-  setViewSettings: (key: string, viewSettings: ViewSettings) => {
-    if (!key) return;
-    const id = key.split('-')[0]!;
-    const bookData = useBookDataStore.getState().booksData[id];
-    const viewState = get().viewStates[key];
-    if (!viewState || !bookData) return;
-    if (viewState.isPrimary) {
-      useBookDataStore.setState((state) => ({
-        booksData: {
-          ...state.booksData,
-          [id]: {
-            ...bookData,
-            config: {
-              ...bookData.config,
-              updatedAt: Date.now(),
-              viewSettings,
-            },
-          },
-        },
-      }));
-    }
-    set((state) => ({
-      viewStates: {
-        ...state.viewStates,
-        [key]: {
-          ...state.viewStates[key]!,
-          viewSettings,
-        },
-      },
-    }));
-  },
-  getProgress: (key: string) => get().viewStates[key]?.progress || null,
-  setProgress: (
-    key: string,
-    location: string,
-    tocItem: TOCItem,
-    section: PageInfo,
-    pageinfo: PageInfo,
-    timeinfo: TimeInfo,
-    range: Range,
-  ) =>
-    set((state) => {
-      const id = key.split('-')[0]!;
-      const bookData = useBookDataStore.getState().booksData[id];
-      const viewState = state.viewStates[key];
-      if (!viewState || !bookData) return state;
-
-      const pageInfo = bookData.isFixedLayout ? section : pageinfo;
-      const progress: [number, number] = [pageInfo.current + 1, pageInfo.total];
-      const progressPercentage = Math.round((progress[0] / progress[1]) * 100);
-
-      // Lightweight library update — O(1) lookup, no array copy, no refreshGroups
-      const { getBookByHash, updateBookProgress } = useLibraryStore.getState();
-      const existingBook = getBookByHash(id);
-      if (existingBook) {
-        let newReadingStatus = existingBook.readingStatus;
-        if (existingBook.readingStatus === 'unread') {
-          newReadingStatus = undefined;
+      try {
+        const appService = await envConfig.getAppService();
+        // Gate 1: after the first await. If we were cancelled (clearViewState
+        // or a fresh init for the same key) drop everything. Without this,
+        // the rest of the chain would still execute and write back stale
+        // state via BookData / viewStates.
+        if (!loadSessionGuard.isCurrent(key, ticket)) return;
+        const { settings } = useSettingsStore.getState();
+        const { getBookByHash, library } = useLibraryStore.getState();
+        const book = getBookByHash(id);
+        if (!book) {
+          console.error(
+            `Book ${id} not found in library (size=${library.length}); likely the in-memory entry was dropped by a library reload.`,
+          );
+          throw new Error('Book not found');
         }
-        if (progressPercentage >= 100 && existingBook.readingStatus !== 'finished') {
-          newReadingStatus = 'finished';
+        const isPseStream = !!book.url && isPseStreamFileName(book.url);
+        let bookDoc = bookData?.bookDoc;
+        let file: File | null = bookData?.file ?? null;
+        let bookDocDispose: (() => Promise<void>) | undefined = bookData?.dispose;
+        if (!bookDoc || (!isPseStream && !file) || reload) {
+          logger.debug('Loading book', key);
+          if (isPseStream) {
+            const data = parsePseStreamFileName(book.url!);
+            const doc = await openPseStreamBook(data);
+            bookDoc = doc.book;
+            file = null;
+          } else {
+            const content = (await appService.loadBookContent(book)) as BookContent;
+            file = content.file;
+            const doc = await new DocumentLoader(file).open();
+            bookDoc = doc.book;
+            bookDocDispose = doc.dispose;
+          }
         }
-        updateBookProgress(id, progress, newReadingStatus);
-      }
+        const config = await appService.loadBookConfig(book, settings);
+        // Import annotations from third-party readers on first open
+        if (bookDoc.metadata.identifier) {
+          const { getAnnotationProviders } = await import('@/services/annotation');
+          for (const provider of getAnnotationProviders()) {
+            if (provider.isAvailable(appService)) {
+              const merged = await provider.importAnnotations(
+                appService,
+                bookDoc.metadata.identifier,
+                config,
+              );
+              if (merged !== config) {
+                Object.assign(config, merged);
+                await appService.saveBookConfig(book, config, settings);
+              }
+            }
+          }
+        }
+        // Filter out invalid booknotes
+        config.booknotes = config.booknotes?.filter((booknote) => booknote.cfi) ?? [];
+        // Load cached book navigation (TOC + section fragments) or compute and persist.
+        if (book.format === 'EPUB' && bookDoc.rendition?.layout !== 'pre-paginated') {
+          const cachedNav = await appService.loadBookNav(book);
+          if (cachedNav?.version === BOOK_NAV_VERSION && process.env.NODE_ENV === 'production') {
+            hydrateBookNav(bookDoc, cachedNav);
+          } else {
+            const freshNav = await computeBookNav(bookDoc);
+            hydrateBookNav(bookDoc, freshNav);
+            try {
+              await appService.saveBookNav(book, freshNav);
+            } catch (e) {
+              console.warn('Failed to persist book nav cache:', e);
+            }
+          }
+        }
+        await updateToc(
+          bookDoc,
+          config.viewSettings?.sortedTOC ?? false,
+          config.viewSettings?.convertChineseVariant ?? 'none',
+        );
+        if (!bookDoc.metadata.title && file) {
+          bookDoc.metadata.title = getBaseFilename(file.name);
+        }
+        book.sourceTitle = formatTitle(bookDoc.metadata.title);
+        // Correct language codes mistakenly set with language names
+        if (typeof bookDoc.metadata?.language === 'string') {
+          if (bookDoc.metadata.language in SUPPORTED_LANGNAMES) {
+            bookDoc.metadata.language = SUPPORTED_LANGNAMES[bookDoc.metadata.language]!;
+          }
+        }
+        // Set the book's language for formerly imported books, newly imported books have this field set
+        const primaryLanguage = getPrimaryLanguage(bookDoc.metadata.language);
+        book.primaryLanguage = book.primaryLanguage ?? primaryLanguage;
+        book.metadata = book.metadata ?? bookDoc.metadata;
 
-      const oldConfig = bookData.config;
-      const newConfig = {
-        ...bookData.config,
-        progress,
-        location,
-      } as BookConfig;
+        // Update series info from metadata if available and not already set on the book
+        if (bookDoc.metadata.belongsTo?.series) {
+          const belongsTo = bookDoc.metadata.belongsTo.series;
+          const series = Array.isArray(belongsTo) ? belongsTo[0] : belongsTo;
+          if (series) {
+            book.metadata.series = book.metadata.series ?? formatTitle(series.name);
+            book.metadata.seriesIndex =
+              book.metadata.seriesIndex ?? parseFloat(series.position || '0');
+          }
+        }
+        // TODO: uncomment this when we can ensure metaHash is correctly generated for all books
+        // book.metaHash = book.metaHash ?? getMetadataHash(bookDoc.metadata);
+        book.metaHash = getMetadataHash(bookDoc.metadata);
 
-      useBookDataStore.setState((state) => ({
-        booksData: {
-          ...state.booksData,
-          [id]: {
-            ...bookData,
-            config: viewState.isPrimary ? newConfig : oldConfig,
+        const isFixedLayout =
+          bookDoc.rendition?.layout === 'pre-paginated' || FIXED_LAYOUT_FORMATS.has(book.format);
+        const newBookData: BookData = {
+          id,
+          book,
+          file,
+          config,
+          bookDoc,
+          isFixedLayout,
+          ...(bookDocDispose ? { dispose: bookDocDispose } : {}),
+        };
+        // Gate 2: about to commit BookData (and downstream viewStates).
+        // If we were cancelled, drop the BookData write — but ALSO release
+        // the resources we just acquired during this load (ZipReader,
+        // ClosableFile). Otherwise a cancelled init would leak resources
+        // that nobody else references.
+        if (!loadSessionGuard.isCurrent(key, ticket)) {
+          if (bookDocDispose) {
+            try {
+              await bookDocDispose();
+            } catch (e) {
+              logger.warn('initViewState (cancelled): doc dispose failed', e);
+            }
+          }
+          return;
+        }
+        useBookDataStore.setState((state) => ({
+          booksData: {
+            ...state.booksData,
+            [id]: newBookData,
           },
-        },
-      }));
-
-      return {
-        viewStates: {
-          ...state.viewStates,
-          [key]: {
-            ...viewState,
-            progress: {
-              ...viewState.progress,
-              location,
-              sectionHref: tocItem?.href,
-              sectionLabel: tocItem?.label,
-              section,
-              pageinfo,
-              timeinfo,
-              index: section.current,
-              range,
-              page: pageInfo.current + 1,
-            } as BookProgress,
-          },
-        },
-      };
-    }),
-  setBookmarkRibbonVisibility: (key: string, visible: boolean) =>
-    set((state) => ({
-      viewStates: {
-        ...state.viewStates,
-        [key]: {
-          ...state.viewStates[key]!,
-          ribbonVisible: visible,
-        },
-      },
-    })),
-
-  setTTSEnabled: (key: string, enabled: boolean) =>
-    set((state) => ({
-      viewStates: {
-        ...state.viewStates,
-        [key]: {
-          ...state.viewStates[key]!,
-          ttsEnabled: enabled,
-        },
-      },
-    })),
-
-  setIsLoading: (key: string, loading: boolean) =>
-    set((state) => ({
-      viewStates: {
-        ...state.viewStates,
-        [key]: {
-          ...state.viewStates[key]!,
-          loading,
-        },
-      },
-    })),
-
-  setIsSyncing: (key: string, syncing: boolean) =>
-    set((state) => ({
-      viewStates: {
-        ...state.viewStates,
-        [key]: {
-          ...state.viewStates[key]!,
-          syncing,
-        },
-      },
-    })),
-
-  getGridInsets: (key: string) =>
-    get().viewStates[key]?.gridInsets || { top: 0, right: 0, bottom: 0, left: 0 },
-  setGridInsets: (key: string, insets: Insets | null) =>
-    set((state) => ({
-      viewStates: {
-        ...state.viewStates,
-        [key]: {
-          ...state.viewStates[key]!,
-          gridInsets: insets,
-        },
-      },
-    })),
-
-  setViewInited: (key: string, inited: boolean) =>
-    set((state) => ({
-      viewStates: {
-        ...state.viewStates,
-        [key]: {
-          ...state.viewStates[key]!,
-          inited,
-        },
-      },
-    })),
-
-  setPreviewMode: (key: string, previewMode: boolean) =>
-    set((state) => ({
-      viewStates: {
-        ...state.viewStates,
-        [key]: {
-          ...state.viewStates[key]!,
-          previewMode,
-        },
-      },
-    })),
-
-  recreateViewer: (envConfig: EnvConfigType, key: string) => {
-    const id = key.split('-')[0]!;
-    get()
-      .initViewState(envConfig, id, key, true, true)
-      .then(() => {
+        }));
+        const configViewSettings = config.viewSettings!;
+        const globalViewSettings = settings.globalViewSettings;
+        // Gate 3: about to write the success viewState. Re-check ticket — a
+        // cancellation could have raced between the BookData set and now.
+        // (BookData was already committed, but clearViewState's last-view
+        // detection will release it on the next pass.)
+        if (!loadSessionGuard.isCurrent(key, ticket)) return;
         set((state) => ({
           viewStates: {
             ...state.viewStates,
             [key]: {
-              ...state.viewStates[key]!,
+              ...state.viewStates[key],
+              key,
+              view: null,
               viewerKey: `${key}-${uniqueId()}`,
+              isPrimary,
+              loading: false,
+              inited: false,
+              error: null,
+              progress: null,
+              ribbonVisible: false,
+              ttsEnabled: false,
+              syncing: false,
+              gridInsets: null,
+              previewMode: false,
+              viewSettings: { ...globalViewSettings, ...configViewSettings },
             },
           },
         }));
-      });
-  },
-}));
+      } catch (error) {
+        console.error(error);
+        // Gate 4: about to write the error viewState. If we were cancelled,
+        // skip — otherwise an old init's error would clobber a fresh init's
+        // success state for the same key.
+        if (!loadSessionGuard.isCurrent(key, ticket)) return;
+        set((state) => ({
+          viewStates: {
+            ...state.viewStates,
+            [key]: {
+              ...state.viewStates[key],
+              key: '',
+              view: null,
+              viewerKey: '',
+              isPrimary: false,
+              loading: false,
+              inited: false,
+              error: 'Failed to load book.',
+              progress: null,
+              ribbonVisible: false,
+              ttsEnabled: false,
+              syncing: false,
+              gridInsets: null,
+              previewMode: false,
+              viewSettings: null,
+            },
+          },
+        }));
+        throw error;
+      }
+    },
+    getViewSettings: (key: string) => get().viewStates[key]?.viewSettings || null,
+    setViewSettings: (key: string, viewSettings: ViewSettings) => {
+      if (!key) return;
+      const id = key.split('-')[0]!;
+      const bookData = useBookDataStore.getState().booksData[id];
+      const viewState = get().viewStates[key];
+      if (!viewState || !bookData) return;
+      if (viewState.isPrimary) {
+        useBookDataStore.setState((state) => ({
+          booksData: {
+            ...state.booksData,
+            [id]: {
+              ...bookData,
+              config: {
+                ...bookData.config,
+                updatedAt: Date.now(),
+                viewSettings,
+              },
+            },
+          },
+        }));
+      }
+      set((state) => ({
+        viewStates: {
+          ...state.viewStates,
+          [key]: {
+            ...state.viewStates[key]!,
+            viewSettings,
+          },
+        },
+      }));
+    },
+    getProgress: (key: string) => get().viewStates[key]?.progress || null,
+    setProgress: (
+      key: string,
+      location: string,
+      tocItem: TOCItem,
+      section: PageInfo,
+      pageinfo: PageInfo,
+      timeinfo: TimeInfo,
+      range: Range,
+    ) =>
+      set((state) => {
+        const id = key.split('-')[0]!;
+        const bookData = useBookDataStore.getState().booksData[id];
+        const viewState = state.viewStates[key];
+        if (!viewState || !bookData) return state;
+
+        const pageInfo = bookData.isFixedLayout ? section : pageinfo;
+        const progress: [number, number] = [pageInfo.current + 1, pageInfo.total];
+        const progressPercentage = Math.round((progress[0] / progress[1]) * 100);
+
+        // Lightweight library update — O(1) lookup, no array copy, no refreshGroups
+        const { getBookByHash, updateBookProgress } = useLibraryStore.getState();
+        const existingBook = getBookByHash(id);
+        if (existingBook) {
+          let newReadingStatus = existingBook.readingStatus;
+          if (existingBook.readingStatus === 'unread') {
+            newReadingStatus = undefined;
+          }
+          if (progressPercentage >= 100 && existingBook.readingStatus !== 'finished') {
+            newReadingStatus = 'finished';
+          }
+          updateBookProgress(id, progress, newReadingStatus);
+        }
+
+        const oldConfig = bookData.config;
+        const newConfig = {
+          ...bookData.config,
+          progress,
+          location,
+        } as BookConfig;
+
+        useBookDataStore.setState((state) => ({
+          booksData: {
+            ...state.booksData,
+            [id]: {
+              ...bookData,
+              config: viewState.isPrimary ? newConfig : oldConfig,
+            },
+          },
+        }));
+
+        return {
+          viewStates: {
+            ...state.viewStates,
+            [key]: {
+              ...viewState,
+              progress: {
+                ...viewState.progress,
+                location,
+                sectionHref: tocItem?.href,
+                sectionLabel: tocItem?.label,
+                section,
+                pageinfo,
+                timeinfo,
+                index: section.current,
+                range,
+                page: pageInfo.current + 1,
+              } as BookProgress,
+            },
+          },
+        };
+      }),
+    setBookmarkRibbonVisibility: (key: string, visible: boolean) =>
+      set((state) => ({
+        viewStates: {
+          ...state.viewStates,
+          [key]: {
+            ...state.viewStates[key]!,
+            ribbonVisible: visible,
+          },
+        },
+      })),
+
+    setTTSEnabled: (key: string, enabled: boolean) =>
+      set((state) => ({
+        viewStates: {
+          ...state.viewStates,
+          [key]: {
+            ...state.viewStates[key]!,
+            ttsEnabled: enabled,
+          },
+        },
+      })),
+
+    setIsLoading: (key: string, loading: boolean) =>
+      set((state) => ({
+        viewStates: {
+          ...state.viewStates,
+          [key]: {
+            ...state.viewStates[key]!,
+            loading,
+          },
+        },
+      })),
+
+    setIsSyncing: (key: string, syncing: boolean) =>
+      set((state) => ({
+        viewStates: {
+          ...state.viewStates,
+          [key]: {
+            ...state.viewStates[key]!,
+            syncing,
+          },
+        },
+      })),
+
+    getGridInsets: (key: string) =>
+      get().viewStates[key]?.gridInsets || { top: 0, right: 0, bottom: 0, left: 0 },
+    setGridInsets: (key: string, insets: Insets | null) =>
+      set((state) => ({
+        viewStates: {
+          ...state.viewStates,
+          [key]: {
+            ...state.viewStates[key]!,
+            gridInsets: insets,
+          },
+        },
+      })),
+
+    setViewInited: (key: string, inited: boolean) =>
+      set((state) => ({
+        viewStates: {
+          ...state.viewStates,
+          [key]: {
+            ...state.viewStates[key]!,
+            inited,
+          },
+        },
+      })),
+
+    setPreviewMode: (key: string, previewMode: boolean) =>
+      set((state) => ({
+        viewStates: {
+          ...state.viewStates,
+          [key]: {
+            ...state.viewStates[key]!,
+            previewMode,
+          },
+        },
+      })),
+
+    recreateViewer: (envConfig: EnvConfigType, key: string) => {
+      const id = key.split('-')[0]!;
+      get()
+        .initViewState(envConfig, id, key, true, true)
+        .then(() => {
+          set((state) => ({
+            viewStates: {
+              ...state.viewStates,
+              [key]: {
+                ...state.viewStates[key]!,
+                viewerKey: `${key}-${uniqueId()}`,
+              },
+            },
+          }));
+        });
+    },
+  };
+});

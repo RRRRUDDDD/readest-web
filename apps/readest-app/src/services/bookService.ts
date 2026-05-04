@@ -31,9 +31,9 @@ import { DEFAULT_BOOK_SEARCH_CONFIG, DEFAULT_FIXED_LAYOUT_VIEW_SETTINGS } from '
 import { isContentURI, isValidURL, makeSafeFilename } from '@/utils/misc';
 import { deserializeConfig, serializeConfig } from '@/utils/serializer';
 import { ClosableFile } from '@/utils/file';
+import { logger } from '@/utils/logger';
 import { TxtToEpubConverter } from '@/utils/txt';
 import { svg2png } from '@/utils/svg';
-import { logger } from '@/utils/logger';
 import { normalizeMetadataIsbn } from '@/utils/isbn';
 import { BookFileNotFoundError } from './errors';
 import { fetch as tauriFetch } from '@tauri-apps/plugin-http';
@@ -241,11 +241,15 @@ export async function importBook(
     lookupIndex,
   } = options;
   const isPseStream = typeof file === 'string' && isPseStreamFileName(file);
+  // Hoist resource bindings so the outer finally can release them on every
+  // exit path — including the early throws inside the inner file-loading
+  // try/catch (see .claude/plan/b2-b3-codex-fixes.md L1+L2+L3).
+  let fileobj: File | undefined;
+  let docDispose: (() => Promise<void>) | undefined;
   try {
     let loadedBook: BookDoc;
     let format: BookFormat;
     let filename: string;
-    let fileobj: File | undefined;
 
     if (transient && typeof file !== 'string') {
       throw new Error('Transient import is only supported for file paths');
@@ -271,7 +275,10 @@ export async function importBook(
         if (!fileobj || fileobj.size === 0) {
           throw new Error('Invalid or empty book file');
         }
-        ({ book: loadedBook, format } = await new DocumentLoader(fileobj).open());
+        const doc = await new DocumentLoader(fileobj).open();
+        loadedBook = doc.book;
+        format = doc.format;
+        docDispose = doc.dispose;
       }
       if (!loadedBook) {
         throw new Error('Unsupported or corrupted book file');
@@ -471,15 +478,32 @@ export async function importBook(
       }
     }
     book.coverImageUrl = await generateCoverImageUrlFn(book);
-    const f = file as ClosableFile;
-    if (f && f.close) {
-      await f.close();
-    }
 
     return existingBook || book;
   } catch (error) {
     console.error('Error importing book:', error);
     throw error;
+  } finally {
+    // L1+L3 fix: release resources on every exit path. The pre-B2-3 code
+    // closed `file as ClosableFile` only on the success path inside the
+    // try block, leaking on every error. Now the ZipReader (via
+    // docDispose) and the file handle (if ClosableFile) are released
+    // here regardless of success or failure.
+    if (docDispose) {
+      try {
+        await docDispose();
+      } catch (e) {
+        logger.warn('importBook: doc dispose failed', e);
+      }
+    }
+    const f = fileobj as Partial<ClosableFile> | undefined;
+    if (f?.close) {
+      try {
+        await f.close();
+      } catch (e) {
+        logger.warn('importBook: file close failed', e);
+      }
+    }
   }
 }
 
@@ -623,27 +647,52 @@ export async function fetchBookDetails(
  */
 export async function refreshBookMetadata(fs: FileSystem, book: Book): Promise<boolean> {
   const { file } = await loadBookContent(fs, book);
-  const { book: bookDoc } = await new DocumentLoader(file).open();
-  if (!bookDoc) return false;
+  // L4 fix: try/finally so the ZipReader and the file handle are released
+  // on every exit (including the early `return false`). Before B2-3 the
+  // file stayed open every refresh — see .claude/plan/b2-b3-codex-fixes.md
+  // P1-⑧.
+  let docDispose: (() => Promise<void>) | undefined;
+  try {
+    const doc = await new DocumentLoader(file).open();
+    docDispose = doc.dispose;
+    const bookDoc = doc.book;
+    if (!bookDoc) return false;
 
-  book.metadata = bookDoc.metadata;
-  book.metaHash = getMetadataHash(bookDoc.metadata);
-  const primaryLanguage = getPrimaryLanguage(bookDoc.metadata.language);
-  if (primaryLanguage) {
-    book.primaryLanguage = primaryLanguage;
-  }
+    book.metadata = bookDoc.metadata;
+    book.metaHash = getMetadataHash(bookDoc.metadata);
+    const primaryLanguage = getPrimaryLanguage(bookDoc.metadata.language);
+    if (primaryLanguage) {
+      book.primaryLanguage = primaryLanguage;
+    }
 
-  // Update series info from metadata
-  if (book.metadata?.belongsTo?.series) {
-    const belongsTo = book.metadata.belongsTo.series;
-    const series = Array.isArray(belongsTo) ? belongsTo[0] : belongsTo;
-    if (series) {
-      book.metadata.series = formatTitle(series.name);
-      book.metadata.seriesIndex = parseFloat(series.position || '0');
+    // Update series info from metadata
+    if (book.metadata?.belongsTo?.series) {
+      const belongsTo = book.metadata.belongsTo.series;
+      const series = Array.isArray(belongsTo) ? belongsTo[0] : belongsTo;
+      if (series) {
+        book.metadata.series = formatTitle(series.name);
+        book.metadata.seriesIndex = parseFloat(series.position || '0');
+      }
+    }
+
+    return true;
+  } finally {
+    if (docDispose) {
+      try {
+        await docDispose();
+      } catch (e) {
+        logger.warn('refreshBookMetadata: doc dispose failed', e);
+      }
+    }
+    const f = file as Partial<ClosableFile>;
+    if (f?.close) {
+      try {
+        await f.close();
+      } catch (e) {
+        logger.warn('refreshBookMetadata: file close failed', e);
+      }
     }
   }
-
-  return true;
 }
 
 export async function exportBook(

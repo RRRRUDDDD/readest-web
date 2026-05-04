@@ -3,6 +3,8 @@ import { SystemSettings } from '@/types/settings';
 import { Book, BookConfig, BookNote } from '@/types/book';
 import { EnvConfigType } from '@/services/environment';
 import { BookDoc } from '@/libs/document';
+import { ClosableFile } from '@/utils/file';
+import { logger } from '@/utils/logger';
 import { useLibraryStore } from './libraryStore';
 
 export interface BookData {
@@ -13,6 +15,13 @@ export interface BookData {
   config: BookConfig | null;
   bookDoc: BookDoc | null;
   isFixedLayout: boolean;
+  /**
+   * Optional resource-release hook produced by `DocumentLoader.open()`.
+   * Released by `clearBookData` when the last view referencing this id
+   * is removed (see B2-3: P1-⑧). Optional so existing test fixtures and
+   * mock BookData literals don't need updating.
+   */
+  dispose?: () => Promise<void>;
 }
 
 interface BookDataState {
@@ -30,6 +39,38 @@ interface BookDataState {
   clearBookData: (keyOrId: string) => void;
 }
 
+/**
+ * Fire-and-forget resource release for a BookData record.
+ *
+ * Two independent release steps run sequentially so a failure in one
+ * does not skip the other:
+ * 1. `data.dispose()` — releases resources owned by `DocumentLoader.open()`
+ *    (currently the ZipReader for EPUB/CBZ/FBZ formats).
+ * 2. `(file as ClosableFile).close()` — releases the underlying File
+ *    handle when the file is a Tauri-side RemoteFile or any other
+ *    ClosableFile implementation.
+ *
+ * Errors are logged via `logger.warn` and never thrown — the calling
+ * `clearBookData` is synchronous on purpose (React unmount cleanup).
+ */
+const releaseBookDataResources = async (data: BookData): Promise<void> => {
+  if (data.dispose) {
+    try {
+      await data.dispose();
+    } catch (e) {
+      logger.warn('clearBookData: dispose failed', e);
+    }
+  }
+  const closableFile = data.file as Partial<ClosableFile> | null;
+  if (closableFile?.close) {
+    try {
+      await closableFile.close();
+    } catch (e) {
+      logger.warn('clearBookData: file close failed', e);
+    }
+  }
+};
+
 export const useBookDataStore = create<BookDataState>((set, get) => ({
   booksData: {},
   getBookData: (keyOrId: string) => {
@@ -38,6 +79,7 @@ export const useBookDataStore = create<BookDataState>((set, get) => ({
   },
   clearBookData: (keyOrId: string) => {
     const id = keyOrId.split('-')[0]!;
+    const data = get().booksData[id];
     set((state) => {
       const newBooksData = { ...state.booksData };
       delete newBooksData[id];
@@ -45,6 +87,12 @@ export const useBookDataStore = create<BookDataState>((set, get) => ({
         booksData: newBooksData,
       };
     });
+    // Resource release runs in the background — clearBookData itself stays
+    // synchronous because it's called from React unmount paths that don't
+    // await anything. Errors are logged but never propagate.
+    if (data) {
+      void releaseBookDataResources(data);
+    }
   },
   getConfig: (key: string | null) => {
     if (!key) return null;
