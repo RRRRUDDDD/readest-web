@@ -12,6 +12,7 @@ import { useLibraryStore } from '@/store/libraryStore';
 import { useResponsiveSize } from '@/hooks/useResponsiveSize';
 import { useKeyDownActions } from '@/hooks/useKeyDownActions';
 import { BOOK_UNGROUPED_ID, BOOK_UNGROUPED_NAME } from '@/services/constants';
+import { eventDispatcher } from '@/utils/event';
 import { getBreadcrumbs } from '../utils/libraryUtils';
 
 interface GroupingModalProps {
@@ -36,6 +37,7 @@ const GroupingModal: React.FC<GroupingModalProps> = ({
     addGroup,
     getGroups,
     getGroupId,
+    getGroupName,
     getGroupsByParent,
     getParentPath,
     refreshGroups,
@@ -115,23 +117,63 @@ const GroupingModal: React.FC<GroupingModalProps> = ({
   };
 
   const handleRemoveFromGroup = () => {
+    // Resolve selected ids: distinguish group ids (lookup via groups table)
+    // from book hashes. Group selection expands to ALL nested descendants via
+    // groupName prefix matching, mirroring the visual aggregation done by
+    // generateBookshelfItems — without this, selecting an aggregated parent
+    // group like "Fiction" would only ungroup books with groupName === "Fiction"
+    // and silently miss descendants like "Fiction/SciFi/*".
+    const targetGroupNames = new Set<string>();
+    const selectedBookHashes = new Set<string>();
     selectedBooks.forEach((id) => {
-      for (const book of libraryBooks.filter((book) => book.hash === id || book.groupId === id)) {
-        if (
-          book &&
-          book.groupId &&
-          book.groupName &&
-          book.groupId !== BOOK_UNGROUPED_ID &&
-          book.groupName !== BOOK_UNGROUPED_NAME
-        ) {
-          book.groupId = undefined;
-          book.groupName = undefined;
-          book.updatedAt = Date.now();
-        }
+      if (id === BOOK_UNGROUPED_ID) return;
+      const groupName = getGroupName(id);
+      if (groupName) {
+        targetGroupNames.add(groupName);
+      } else {
+        selectedBookHashes.add(id);
       }
     });
-    setLibrary([...libraryBooks]);
-    appService?.saveLibraryBooks(libraryBooks);
+
+    let removedCount = 0;
+    // Build the new library immutably so list items reliably re-render and
+    // we stay consistent with libraryStore conventions (updateBook,
+    // updateBookProgress, updateBooks all use immutable updates).
+    const newLibrary = libraryBooks.map((book) => {
+      if (
+        !book.groupId ||
+        !book.groupName ||
+        book.groupId === BOOK_UNGROUPED_ID ||
+        book.groupName === BOOK_UNGROUPED_NAME
+      ) {
+        return book;
+      }
+      const isSelectedBook = selectedBookHashes.has(book.hash);
+      const belongsToTargetGroup =
+        targetGroupNames.size > 0 &&
+        Array.from(targetGroupNames).some(
+          (g) => book.groupName === g || book.groupName!.startsWith(g + '/'),
+        );
+      if (!isSelectedBook && !belongsToTargetGroup) return book;
+      removedCount += 1;
+      return {
+        ...book,
+        groupId: undefined,
+        groupName: undefined,
+        updatedAt: Date.now(),
+      };
+    });
+
+    setLibrary(newLibrary);
+    appService?.saveLibraryBooks(newLibrary);
+
+    if (removedCount > 0) {
+      eventDispatcher.dispatch('toast', {
+        type: 'info',
+        timeout: 1500,
+        message: _('Removed {{count}} book(s) from group', { count: removedCount }),
+      });
+    }
     onConfirm();
   };
 
@@ -143,20 +185,32 @@ const GroupingModal: React.FC<GroupingModalProps> = ({
         const oldGroupName = originalGroupName;
 
         // Update the group name for all books in this group and nested groups
-        libraryBooks.forEach((book) => {
+        // immutably (consistent with libraryStore conventions). Use slice
+        // instead of String.replace so nested paths whose later segments
+        // happen to match oldGroupName aren't corrupted.
+        const newLibrary = libraryBooks.map((book) => {
           if (book.groupName === oldGroupName) {
-            book.groupName = groupName;
-            book.groupId = getGroupId(book.groupName);
-            book.updatedAt = Date.now();
-          } else if (book.groupName?.startsWith(oldGroupName + '/')) {
-            book.groupName = book.groupName.replace(oldGroupName, groupName);
-            book.groupId = getGroupId(book.groupName);
-            book.updatedAt = Date.now();
+            return {
+              ...book,
+              groupName: groupName,
+              groupId: getGroupId(groupName),
+              updatedAt: Date.now(),
+            };
           }
+          if (book.groupName?.startsWith(oldGroupName + '/')) {
+            const updatedGroupName = groupName + book.groupName.slice(oldGroupName.length);
+            return {
+              ...book,
+              groupName: updatedGroupName,
+              groupId: getGroupId(updatedGroupName),
+              updatedAt: Date.now(),
+            };
+          }
+          return book;
         });
 
-        setLibrary([...libraryBooks]);
-        appService?.saveLibraryBooks(libraryBooks);
+        setLibrary(newLibrary);
+        appService?.saveLibraryBooks(newLibrary);
 
         refreshGroups();
         setShowInput(false);
@@ -198,17 +252,45 @@ const GroupingModal: React.FC<GroupingModalProps> = ({
   };
 
   const handleConfirmGrouping = () => {
+    if (!selectedGroup) return;
+
+    // Mirror handleRemoveFromGroup: when user selects an aggregated parent
+    // group (e.g. "Fiction" at the root with nested descendants), all books
+    // in the subtree should be moved — not just the ones whose groupName
+    // strictly equals the source group. Nested structure flattens into the
+    // chosen target group; users who want to preserve nesting should rename
+    // instead.
+    const targetGroupNames = new Set<string>();
+    const selectedBookHashes = new Set<string>();
     selectedBooks.forEach((id) => {
-      for (const book of libraryBooks.filter((book) => book.hash === id || book.groupId === id)) {
-        if (book && selectedGroup) {
-          book.groupId = selectedGroup.id;
-          book.groupName = selectedGroup.name;
-          book.updatedAt = Date.now();
-        }
+      if (id === BOOK_UNGROUPED_ID) return;
+      const groupName = getGroupName(id);
+      if (groupName) {
+        targetGroupNames.add(groupName);
+      } else {
+        selectedBookHashes.add(id);
       }
     });
-    setLibrary([...libraryBooks]);
-    appService?.saveLibraryBooks(libraryBooks);
+
+    const newLibrary = libraryBooks.map((book) => {
+      const isSelectedBook = selectedBookHashes.has(book.hash);
+      const belongsToTargetGroup =
+        !!book.groupName &&
+        targetGroupNames.size > 0 &&
+        Array.from(targetGroupNames).some(
+          (g) => book.groupName === g || book.groupName!.startsWith(g + '/'),
+        );
+      if (!isSelectedBook && !belongsToTargetGroup) return book;
+      return {
+        ...book,
+        groupId: selectedGroup.id,
+        groupName: selectedGroup.name,
+        updatedAt: Date.now(),
+      };
+    });
+
+    setLibrary(newLibrary);
+    appService?.saveLibraryBooks(newLibrary);
     onConfirm();
   };
 
