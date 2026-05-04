@@ -756,6 +756,8 @@
   "From Directory": "ෆෝල්ඩරයෙන්",
   "Successfully imported {{count}} book(s)_one": "සාර්ථකව ආයාත කළ 1 පොත",
   "Successfully imported {{count}} book(s)_other": "සාර්ථකව ආයාත කළ {{count}} පොත්",
+  "Successfully removed {{count}} book(s) from group_one": "සාර්ථකව සමූහයෙන් ඉවත් කළ 1 පොත",
+  "Successfully removed {{count}} book(s) from group_other": "සාර්ථකව සමූහයෙන් ඉවත් කළ {{count}} පොත්",
   "Count": "ගණන",
   "Start Page": "ආරම්භක පිටුව",
   "Search in OPDS Catalog...": "OPDS දත්තසමුදා තුළ සෙවීම...",

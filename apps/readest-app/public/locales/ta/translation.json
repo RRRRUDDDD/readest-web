@@ -756,6 +756,8 @@
   "From Directory": "கோப்புறையிலிருந்து",
   "Successfully imported {{count}} book(s)_one": "வெற்றிகரமாக 1 புத்தகம் இறக்குமதி செய்யப்பட்டது",
   "Successfully imported {{count}} book(s)_other": "வெற்றிகரமாக {{count}} புத்தகங்கள் இறக்குமதி செய்யப்பட்டது",
+  "Successfully removed {{count}} book(s) from group_one": "வெற்றிகரமாக 1 புத்தகம் குழுவிலிருந்து அகற்றப்பட்டது",
+  "Successfully removed {{count}} book(s) from group_other": "வெற்றிகரமாக {{count}} புத்தகங்கள் குழுவிலிருந்து அகற்றப்பட்டன",
   "Count": "எண்ணிக்கை",
   "Start Page": "தொடக்கப் பக்கம்",
   "Search in OPDS Catalog...": "OPDS பட்டியலில் தேடவும்...",

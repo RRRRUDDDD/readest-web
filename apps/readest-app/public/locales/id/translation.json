@@ -746,6 +746,7 @@
   "Rename Group": "Ganti Nama Grup",
   "From Directory": "Dari Direktori",
   "Successfully imported {{count}} book(s)_other": "Berhasil mengimpor {{count}} buku",
+  "Successfully removed {{count}} book(s) from group_other": "Berhasil menghapus {{count}} buku dari grup",
   "Count": "Jumlah",
   "Start Page": "Halaman Awal",
   "Search in OPDS Catalog...": "Cari di Katalog OPDS...",

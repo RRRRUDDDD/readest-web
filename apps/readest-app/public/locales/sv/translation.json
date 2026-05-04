@@ -756,6 +756,8 @@
   "From Directory": "Från katalog",
   "Successfully imported {{count}} book(s)_one": "Importerat 1 bok",
   "Successfully imported {{count}} book(s)_other": "Importerat {{count}} böcker",
+  "Successfully removed {{count}} book(s) from group_one": "Tog bort 1 bok från gruppen",
+  "Successfully removed {{count}} book(s) from group_other": "Tog bort {{count}} böcker från gruppen",
   "Count": "Antal",
   "Start Page": "Start sida",
   "Search in OPDS Catalog...": "Sök i OPDS-katalog...",

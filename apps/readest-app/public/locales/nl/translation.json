@@ -756,6 +756,8 @@
   "From Directory": "Vanuit map",
   "Successfully imported {{count}} book(s)_one": "Succesvol 1 boek geïmporteerd",
   "Successfully imported {{count}} book(s)_other": "Succesvol {{count}} boeken geïmporteerd",
+  "Successfully removed {{count}} book(s) from group_one": "Succesvol 1 boek uit groep verwijderd",
+  "Successfully removed {{count}} book(s) from group_other": "Succesvol {{count}} boeken uit groep verwijderd",
   "Count": "Aantal",
   "Start Page": "Startpagina",
   "Search in OPDS Catalog...": "Zoeken in OPDS-catalogus...",

@@ -20,6 +20,8 @@
   "Are you sure to delete {{count}} selected file(s)?_other": "Are you sure to delete {{count}} selected files?",
   "Successfully imported {{count}} book(s)_one": "Successfully imported {{count}} book",
   "Successfully imported {{count}} book(s)_other": "Successfully imported {{count}} books",
+  "Successfully removed {{count}} book(s) from group_one": "Successfully removed {{count}} book from group",
+  "Successfully removed {{count}} book(s) from group_other": "Successfully removed {{count}} books from group",
   "Set status for {{count}} book(s)_one": "Set status for {{count}} book",
   "Set status for {{count}} book(s)_other": "Set status for {{count}} books",
   "{{count}} book(s) synced_one": "{{count}} book synced",

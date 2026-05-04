@@ -756,6 +756,8 @@
   "From Directory": "از مسیر",
   "Successfully imported {{count}} book(s)_one": "با موفقیت 1 کتاب وارد شد",
   "Successfully imported {{count}} book(s)_other": "با موفقیت {{count}} کتاب وارد شد",
+  "Successfully removed {{count}} book(s) from group_one": "با موفقیت 1 کتاب از گروه حذف شد",
+  "Successfully removed {{count}} book(s) from group_other": "با موفقیت {{count}} کتاب از گروه حذف شد",
   "Count": "تعداد",
   "Start Page": "صفحه شروع",
   "Search in OPDS Catalog...": "جستجو در فهرست OPDS...",

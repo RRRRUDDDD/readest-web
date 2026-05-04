@@ -756,6 +756,8 @@
   "From Directory": "निर्देशिका से",
   "Successfully imported {{count}} book(s)_one": "सफलतापूर्वक 1 पुस्तक आयात की गई",
   "Successfully imported {{count}} book(s)_other": "सफलतापूर्वक {{count}} पुस्तकों का आयात किया गया",
+  "Successfully removed {{count}} book(s) from group_one": "सफलतापूर्वक 1 पुस्तक समूह से हटाई गई",
+  "Successfully removed {{count}} book(s) from group_other": "सफलतापूर्वक {{count}} पुस्तकों को समूह से हटाया गया",
   "Count": "गणना",
   "Start Page": "प्रारंभ पृष्ठ",
   "Search in OPDS Catalog...": "OPDS कैटलॉग में खोजें...",

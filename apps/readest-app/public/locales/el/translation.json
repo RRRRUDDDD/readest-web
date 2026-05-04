@@ -756,6 +756,8 @@
   "From Directory": "Από κατάλογο",
   "Successfully imported {{count}} book(s)_one": "Επιτυχής εισαγωγή 1 βιβλίου",
   "Successfully imported {{count}} book(s)_other": "Επιτυχής εισαγωγή {{count}} βιβλίων",
+  "Successfully removed {{count}} book(s) from group_one": "Επιτυχής αφαίρεση 1 βιβλίου από την ομάδα",
+  "Successfully removed {{count}} book(s) from group_other": "Επιτυχής αφαίρεση {{count}} βιβλίων από την ομάδα",
   "Count": "Πλήθος",
   "Start Page": "Αρχική Σελίδα",
   "Search in OPDS Catalog...": "Αναζήτηση στον κατάλογο OPDS...",

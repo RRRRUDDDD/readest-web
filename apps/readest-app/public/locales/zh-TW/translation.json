@@ -747,6 +747,7 @@
   "Rename Group": "重新命名",
   "From Directory": "從目錄導入",
   "Successfully imported {{count}} book(s)_other": "成功導入 {{count}} 本書",
+  "Successfully removed {{count}} book(s) from group_other": "成功從分組中移除 {{count}} 本書",
   "Count": "數量",
   "Start Page": "起始頁",
   "Search in OPDS Catalog...": "在 OPDS 目錄中搜尋...",

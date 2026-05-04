@@ -746,6 +746,7 @@
   "Rename Group": "เปลี่ยนชื่อกลุ่ม",
   "From Directory": "จากไดเรกทอรี",
   "Successfully imported {{count}} book(s)_other": "นำเข้า {{count}} หนังสือเรียบร้อยแล้ว",
+  "Successfully removed {{count}} book(s) from group_other": "ลบ {{count}} หนังสือออกจากกลุ่มเรียบร้อยแล้ว",
   "Count": "นับ",
   "Start Page": "หน้าเริ่มต้น",
   "Search in OPDS Catalog...": "ค้นหาในแคตตาล็อก OPDS...",

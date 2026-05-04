@@ -748,6 +748,7 @@
   "Rename Group": "重命名分组",
   "From Directory": "从文件夹导入",
   "Successfully imported {{count}} book(s)_other": "成功导入 {{count}} 本书",
+  "Successfully removed {{count}} book(s) from group_other": "成功从分组中移除 {{count}} 本书",
   "Count": "数量",
   "Start Page": "起始页",
   "Search in OPDS Catalog...": "在 OPDS 目录中搜索...",

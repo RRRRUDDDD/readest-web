@@ -756,6 +756,8 @@
   "From Directory": "Aus Verzeichnis",
   "Successfully imported {{count}} book(s)_one": "Erfolgreich 1 Buch importiert",
   "Successfully imported {{count}} book(s)_other": "Erfolgreich {{count}} Bücher importiert",
+  "Successfully removed {{count}} book(s) from group_one": "Erfolgreich 1 Buch aus der Gruppe entfernt",
+  "Successfully removed {{count}} book(s) from group_other": "Erfolgreich {{count}} Bücher aus der Gruppe entfernt",
   "Count": "Anzahl",
   "Start Page": "Startseite",
   "Search in OPDS Catalog...": "Im OPDS-Katalog suchen...",

@@ -756,6 +756,8 @@
   "From Directory": "Dizinden",
   "Successfully imported {{count}} book(s)_one": "Başarıyla 1 kitap içe aktarıldı",
   "Successfully imported {{count}} book(s)_other": "Başarıyla {{count}} kitap içe aktarıldı",
+  "Successfully removed {{count}} book(s) from group_one": "Başarıyla 1 kitap gruptan kaldırıldı",
+  "Successfully removed {{count}} book(s) from group_other": "Başarıyla {{count}} kitap gruptan kaldırıldı",
   "Count": "Sayım",
   "Start Page": "Başlangıç Sayfası",
   "Search in OPDS Catalog...": "OPDS Kataloğunda ara...",

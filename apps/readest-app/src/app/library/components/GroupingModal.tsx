@@ -178,9 +178,9 @@ const GroupingModal: React.FC<GroupingModalProps> = ({
 
     if (removedCount > 0) {
       eventDispatcher.dispatch('toast', {
-        type: 'info',
-        timeout: 1500,
-        message: _('Removed {{count}} book(s) from group', { count: removedCount }),
+        type: 'success',
+        timeout: 2000,
+        message: _('Successfully removed {{count}} book(s) from group', { count: removedCount }),
       });
     }
     onConfirm();

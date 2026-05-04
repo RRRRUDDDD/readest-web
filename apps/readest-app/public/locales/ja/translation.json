@@ -746,6 +746,7 @@
   "Rename Group": "グループ名を変更",
   "From Directory": "ディレクトリから",
   "Successfully imported {{count}} book(s)_other": "成功裏に{{count}}冊の本をインポートしました",
+  "Successfully removed {{count}} book(s) from group_other": "成功裏に{{count}}冊の本をグループから削除しました",
   "Count": "件数",
   "Start Page": "開始ページ",
   "Search in OPDS Catalog...": "OPDSカタログ内を検索...",

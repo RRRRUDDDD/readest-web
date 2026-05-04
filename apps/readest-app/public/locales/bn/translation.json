@@ -756,6 +756,8 @@
   "From Directory": "ডিরেক্টরি থেকে",
   "Successfully imported {{count}} book(s)_one": "সফলভাবে ১টি বই আমদানি করা হয়েছে",
   "Successfully imported {{count}} book(s)_other": "সফলভাবে {{count}}টি বই আমদানি করা হয়েছে",
+  "Successfully removed {{count}} book(s) from group_one": "সফলভাবে ১টি বই দল থেকে সরানো হয়েছে",
+  "Successfully removed {{count}} book(s) from group_other": "সফলভাবে {{count}}টি বই দল থেকে সরানো হয়েছে",
   "Count": "গণনা",
   "Start Page": "শুরু পৃষ্ঠা",
   "Search in OPDS Catalog...": "OPDS ক্যাটালগে অনুসন্ধান করুন...",
