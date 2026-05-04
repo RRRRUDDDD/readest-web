@@ -2,6 +2,7 @@ import { getAPIBaseUrl } from '@/services/environment';
 import { AppService } from '@/types/system';
 import { getUserID } from '@/utils/access';
 import { fetchWithAuth } from '@/utils/fetch';
+import { getFilename } from '@/utils/path';
 import { webUpload, webDownload, ProgressHandler, ProgressPayload } from '@/utils/transfer';
 
 const API_ENDPOINTS = {
@@ -150,7 +151,16 @@ export const downloadFile = async ({
       headers,
       signal,
     );
-    await appService.writeFile(dst, 'None', await blob.arrayBuffer());
+    // Wrap the downloaded Blob as a File and hand it straight to writeFile.
+    // `new File([blob], ...)` is a zero-copy reference wrapper, and
+    // webAppService.writeFile now stores File / Blob via IndexedDB
+    // structured clone instead of materializing an ArrayBuffer first —
+    // peak memory drops by the size of the book (1 GB book ≠ 1 GB
+    // arrayBuffer allocation). See B2-7 plan.
+    const file = new File([blob], getFilename(dst), {
+      type: blob.type || 'application/octet-stream',
+    });
+    await appService.writeFile(dst, 'None', file);
     return responseHeaders;
   } catch (error) {
     console.error(`File '${dst}' download failed:`, error);

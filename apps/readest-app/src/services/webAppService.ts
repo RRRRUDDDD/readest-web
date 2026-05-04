@@ -180,9 +180,13 @@ const indexedDBFileSystem: FileSystem = {
     const { fp } = this.resolvePath(path, base);
     const db = await openIndexedDB();
 
-    if (content instanceof File) {
-      content = await content.arrayBuffer();
-    }
+    // IndexedDB stores File / Blob natively via structured clone — far
+    // cheaper than materializing an ArrayBuffer first. Pre-B2-7 a File
+    // payload was forced through `await content.arrayBuffer()` here,
+    // doubling peak memory on large book downloads (a 1 GB book caused
+    // a 1 GB allocation just before the put). readFile transparently
+    // handles both Blob and ArrayBuffer shapes (see line 160-169), so
+    // the round-trip stays correct.
     return new Promise<void>((resolve, reject) => {
       const transaction = db.transaction('files', 'readwrite');
       const store = transaction.objectStore('files');

@@ -32,7 +32,7 @@ import { isContentURI, isValidURL, makeSafeFilename } from '@/utils/misc';
 import { deserializeConfig, serializeConfig } from '@/utils/serializer';
 import { ClosableFile } from '@/utils/file';
 import { logger } from '@/utils/logger';
-import { TxtToEpubConverter } from '@/utils/txt';
+import { convertTxtToEpubWithFallback } from '@/utils/txt-worker';
 import { svg2png } from '@/utils/svg';
 import { normalizeMetadataIsbn } from '@/utils/isbn';
 import { BookFileNotFoundError } from './errors';
@@ -269,8 +269,12 @@ export async function importBook(
           filename = file.name;
         }
         if (/\.txt$/i.test(filename)) {
-          const txt2epub = new TxtToEpubConverter();
-          ({ file: fileobj } = await txt2epub.convert({ file: fileobj }));
+          // Route TXT → EPUB conversion through the worker so a large book
+          // (>16 MB on iOS, any size elsewhere) doesn't block the main
+          // thread. convertTxtToEpubWithFallback handles iOS bypass and
+          // worker-failure fallback internally — see B2-6 plan and
+          // .claude/plan/b2-b3-codex-fixes.md P1-⑥.
+          ({ file: fileobj } = await convertTxtToEpubWithFallback({ file: fileobj }));
         }
         if (!fileobj || fileobj.size === 0) {
           throw new Error('Invalid or empty book file');
