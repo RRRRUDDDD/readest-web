@@ -2,7 +2,6 @@ import clsx from 'clsx';
 import React, { useCallback, useRef, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { FaSearch } from 'react-icons/fa';
-import { PiPlus } from 'react-icons/pi';
 import { PiSelectionAll, PiSelectionAllFill } from 'react-icons/pi';
 import { PiDotsThreeCircle } from 'react-icons/pi';
 import { MdOutlineMenu } from 'react-icons/md';
@@ -19,15 +18,12 @@ import useShortcuts from '@/hooks/useShortcuts';
 import WindowButtons from '@/components/WindowButtons';
 import Dropdown from '@/components/Dropdown';
 import SettingsMenu from './SettingsMenu';
-import ImportMenu from './ImportMenu';
 import ViewMenu from './ViewMenu';
 
 interface LibraryHeaderProps {
   isSelectMode: boolean;
   isSelectAll: boolean;
   onPullLibrary: () => void;
-  onImportBooksFromFiles: () => void;
-  onImportBooksFromDirectory?: () => void;
   onOpenCatalogManager: () => void;
   onToggleSelectMode: () => void;
   onSelectAll: () => void;
@@ -38,8 +34,6 @@ const LibraryHeader: React.FC<LibraryHeaderProps> = ({
   isSelectMode,
   isSelectAll,
   onPullLibrary,
-  onImportBooksFromFiles,
-  onImportBooksFromDirectory,
   onOpenCatalogManager,
   onToggleSelectMode,
   onSelectAll,
@@ -89,8 +83,6 @@ const LibraryHeader: React.FC<LibraryHeaderProps> = ({
   );
 
   if (!insets) return null;
-
-  const isMobile = appService?.isMobile || window.innerWidth <= 640;
 
   return (
     <div
@@ -149,35 +141,19 @@ const LibraryHeader: React.FC<LibraryHeaderProps> = ({
                 <IoMdCloseCircle className='h-4 w-4' />
               </button>
             )}
-            <span className='bg-base-content/50 mx-2 h-4 w-[0.5px]'></span>
-            <Dropdown
-              label={_('Import Books')}
-              className={clsx(
-                'exclude-title-bar-mousedown dropdown-bottom dropdown-center cursor-pointer',
-              )}
-              buttonClassName='p-0 h-6 min-h-6 w-6 flex touch-target items-center justify-center !bg-transparent'
-              toggleButton={<PiPlus role='none' className='m-0.5 h-5 w-5' />}
+            <span className='bg-base-content/50 me-2 ms-auto h-4 w-[0.5px]'></span>
+            <button
+              onClick={onToggleSelectMode}
+              aria-label={_('Select Books')}
+              title={_('Select Books')}
+              className='touch-target flex h-6 w-6 items-center justify-center'
             >
-              <ImportMenu
-                onImportBooksFromFiles={onImportBooksFromFiles}
-                onImportBooksFromDirectory={onImportBooksFromDirectory}
-                onOpenCatalogManager={onOpenCatalogManager}
-              />
-            </Dropdown>
-            {isMobile ? null : (
-              <button
-                onClick={onToggleSelectMode}
-                aria-label={_('Select Books')}
-                title={_('Select Books')}
-                className='h-6'
-              >
-                {isSelectMode ? (
-                  <PiSelectionAllFill role='button' className='text-base-content/60 h-6 w-6' />
-                ) : (
-                  <PiSelectionAll role='button' className='text-base-content/60 h-6 w-6' />
-                )}
-              </button>
-            )}
+              {isSelectMode ? (
+                <PiSelectionAllFill role='button' className='text-base-content/60 h-6 w-6' />
+              ) : (
+                <PiSelectionAll role='button' className='text-base-content/60 h-6 w-6' />
+              )}
+            </button>
           </div>
         </div>
         {isSelectMode ? (
@@ -213,7 +189,10 @@ const LibraryHeader: React.FC<LibraryHeaderProps> = ({
               buttonClassName='btn btn-ghost h-8 min-h-8 w-8 p-0'
               toggleButton={<MdOutlineMenu role='none' size={iconSize18} />}
             >
-              <SettingsMenu onPullLibrary={onPullLibrary} />
+              <SettingsMenu
+                onPullLibrary={onPullLibrary}
+                onOpenCatalogManager={onOpenCatalogManager}
+              />
             </Dropdown>
             {appService?.hasWindowBar && (
               <WindowButtons

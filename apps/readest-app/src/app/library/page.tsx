@@ -730,21 +730,6 @@ const LibraryPageContent = ({ searchParams }: { searchParams: ReadonlyURLSearchP
     });
   };
 
-  const handleImportBooksFromDirectory = async () => {
-    if (!appService) return;
-    setIsSelectMode(false);
-    console.log('Importing books from directory...');
-    const directory = await appService.selectDirectory('read');
-    if (!directory) return;
-    const files = (await appService.readDirectory(directory, 'None')).map((file) => ({
-      path: file.path,
-      basePath: directory,
-    }));
-    if (files.length === 0) return;
-    const groupId = searchParams?.get('group') || '';
-    await importBooks(files, groupId);
-  };
-
   const handleSetSelectMode = (selectMode: boolean) => {
     setIsSelectMode(selectMode);
     setIsSelectAll(false);
@@ -798,10 +783,6 @@ const LibraryPageContent = ({ searchParams }: { searchParams: ReadonlyURLSearchP
           isSelectMode={isSelectMode}
           isSelectAll={isSelectAll}
           onPullLibrary={pullLibrary}
-          onImportBooksFromFiles={handleImportBooksFromFiles}
-          onImportBooksFromDirectory={
-            appService?.canReadExternalDir ? handleImportBooksFromDirectory : undefined
-          }
           onOpenCatalogManager={handleShowOPDSDialog}
           onToggleSelectMode={() => handleSetSelectMode(!isSelectMode)}
           onSelectAll={handleSelectAll}

@@ -4,7 +4,7 @@ import { useRouter } from 'next/navigation';
 import { PiUserCircle, PiUserCircleCheck, PiGear } from 'react-icons/pi';
 import { PiSun, PiMoon } from 'react-icons/pi';
 import { TbSunMoon } from 'react-icons/tb';
-import { MdCloudSync, MdSync, MdSyncProblem } from 'react-icons/md';
+import { MdCloudSync, MdSync, MdSyncProblem, MdRssFeed } from 'react-icons/md';
 
 import { setBackupDialogVisible } from '@/app/library/components/BackupWindow';
 import { useAuth } from '@/context/AuthContext';
@@ -25,10 +25,15 @@ import Menu from '@/components/Menu';
 
 interface SettingsMenuProps {
   onPullLibrary: (fullRefresh?: boolean, verbose?: boolean) => void;
+  onOpenCatalogManager: () => void;
   setIsDropdownOpen?: (isOpen: boolean) => void;
 }
 
-const SettingsMenu: React.FC<SettingsMenuProps> = ({ onPullLibrary, setIsDropdownOpen }) => {
+const SettingsMenu: React.FC<SettingsMenuProps> = ({
+  onPullLibrary,
+  onOpenCatalogManager,
+  setIsDropdownOpen,
+}) => {
   const _ = useTranslation();
   const router = useRouter();
   const { envConfig, appService } = useEnv();
@@ -124,6 +129,11 @@ const SettingsMenu: React.FC<SettingsMenuProps> = ({ onPullLibrary, setIsDropdow
   const handleBackupRestore = () => {
     setIsDropdownOpen?.(false);
     setBackupDialogVisible(true);
+  };
+
+  const handleOpenCatalogManager = () => {
+    setIsDropdownOpen?.(false);
+    onOpenCatalogManager();
   };
 
   const handleRefreshMetadata = async () => {
@@ -306,6 +316,13 @@ const SettingsMenu: React.FC<SettingsMenuProps> = ({ onPullLibrary, setIsDropdow
       <hr aria-hidden='true' className='border-base-200 my-1' />
       <MenuItem label={_('Advanced Settings')}>
         <ul className='ms-0 flex flex-col ps-0 before:hidden'>
+          <MenuItem
+            label={
+              appService?.isOnlineCatalogsAccessible ? _('Online Library') : _('OPDS Catalogs')
+            }
+            Icon={MdRssFeed}
+            onClick={handleOpenCatalogManager}
+          />
           {appService?.canCustomizeRootDir && (
             <MenuItem label={_('Change Data Location')} onClick={handleSetRootDir} />
           )}
