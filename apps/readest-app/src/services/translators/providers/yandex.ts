@@ -1,6 +1,4 @@
 import { stubTranslation as _ } from '@/utils/misc';
-import { fetch as tauriFetch } from '@tauri-apps/plugin-http';
-import { isTauriAppPlatform } from '@/services/environment';
 import { normalizeToShortLang } from '@/utils/lang';
 import { TranslationProvider } from '../types';
 
@@ -12,7 +10,6 @@ async function translateSingleTextForService(
   lang: string,
   service: string,
 ): Promise<string[]> {
-  const fetchImpl = isTauriAppPlatform() ? tauriFetch : window.fetch;
   const url = 'https://translate.toil.cc/v2/translate/';
 
   const request = {
@@ -27,7 +24,7 @@ async function translateSingleTextForService(
     }),
   };
 
-  const response = await fetchImpl(url, request);
+  const response = await fetch(url, request);
 
   if (!response.ok) {
     const response_json = JSON.stringify(await response.json());

@@ -1,7 +1,6 @@
 import type { Configuration, ZipWriter } from '@zip.js/zip.js';
 import { AppService } from '@/types/system';
 import { EXTS } from '@/libs/document';
-import { isTauriAppPlatform } from '@/services/environment';
 import { Book, BookConfig, BookNote } from '@/types/book';
 import { getLibraryFilename } from '@/utils/book';
 import { configureZip } from '@/utils/zip';
@@ -128,31 +127,6 @@ export async function createBackupZip(
   await writer.close();
   const blob = await blobWriter.getData();
   return await blob.arrayBuffer();
-}
-
-/**
- * Stream a backup zip directly to a file path on disk.
- * Uses TransformStream so only chunks are held in memory at a time.
- * Only available on Tauri (requires @tauri-apps/plugin-fs).
- */
-export async function createBackupZipToFile(
-  appService: AppService,
-  filePath: string,
-  onProgress?: ProgressCallback,
-): Promise<void> {
-  await configureZip(ZIP_WRITE_CONFIG);
-  const { ZipWriter } = await import('@zip.js/zip.js');
-  const { writeFile } = await import('@tauri-apps/plugin-fs');
-
-  const { readable, writable } = new TransformStream<Uint8Array>();
-
-  // Start streaming readable side to the file (runs concurrently)
-  const writePromise = writeFile(filePath, readable);
-
-  const writer = new ZipWriter(writable);
-  await addBackupEntriesToZip(writer, appService, onProgress);
-  await writer.close();
-  await writePromise;
 }
 
 /**
@@ -322,29 +296,15 @@ export async function restoreFromBackupZip(
 
 /**
  * Create and save a backup zip file.
- * On Tauri, streams directly to disk to avoid holding the entire zip in memory.
- * On web, builds the zip in memory and triggers a download.
+ * Builds the zip in memory and triggers a download in the browser.
  */
 export async function saveBackupFile(
   appService: AppService,
   filename: string,
   onProgress?: ProgressCallback,
 ): Promise<boolean> {
-  if (isTauriAppPlatform()) {
-    // Tauri: stream directly to the chosen file path
-    const { save: saveDialog } = await import('@tauri-apps/plugin-dialog');
-    const ext = filename.split('.').pop() || 'zip';
-    const filePath = await saveDialog({
-      defaultPath: filename,
-      filters: [{ name: ext.toUpperCase(), extensions: [ext] }],
-    });
-    if (!filePath) return false;
-    await createBackupZipToFile(appService, filePath, onProgress);
-    return true;
-  } else {
-    // Web: build zip in memory then save
-    const zipData = await createBackupZip(appService, onProgress);
-    let filePath: string | undefined;
-    return appService.saveFile(filename, zipData, { filePath, mimeType: 'application/zip' });
-  }
+  // Web: build zip in memory then save
+  const zipData = await createBackupZip(appService, onProgress);
+  let filePath: string | undefined;
+  return appService.saveFile(filename, zipData, { filePath, mimeType: 'application/zip' });
 }

@@ -6,8 +6,6 @@ import { PiSun, PiMoon } from 'react-icons/pi';
 import { TbSunMoon } from 'react-icons/tb';
 import { MdCloudSync, MdSync, MdSyncProblem } from 'react-icons/md';
 
-import { invoke, PermissionState } from '@tauri-apps/api/core';
-import { isTauriAppPlatform } from '@/services/environment';
 import { setBackupDialogVisible } from '@/app/library/components/BackupWindow';
 import { useAuth } from '@/context/AuthContext';
 import { useEnv } from '@/context/EnvContext';
@@ -18,7 +16,6 @@ import { useTranslation } from '@/hooks/useTranslation';
 import { useTransferQueue } from '@/hooks/useTransferQueue';
 import { navigateToLogin, navigateToProfile } from '@/utils/nav';
 import { handleSetAlwaysOnTop, handleToggleFullScreen } from '@/utils/window';
-import { setMigrateDataDirDialogVisible } from '@/app/library/components/MigrateDataWindow';
 import { requestStoragePermission } from '@/utils/permission';
 import { saveSysSettings } from '@/helpers/settings';
 import { selectDirectory } from '@/utils/bridge';
@@ -29,11 +26,6 @@ import Menu from '@/components/Menu';
 interface SettingsMenuProps {
   onPullLibrary: (fullRefresh?: boolean, verbose?: boolean) => void;
   setIsDropdownOpen?: (isOpen: boolean) => void;
-}
-
-interface Permissions {
-  postNotification: PermissionState;
-  manageStorage: PermissionState;
 }
 
 const SettingsMenu: React.FC<SettingsMenuProps> = ({ onPullLibrary, setIsDropdownOpen }) => {
@@ -47,10 +39,6 @@ const SettingsMenu: React.FC<SettingsMenuProps> = ({ onPullLibrary, setIsDropdow
   const [isAutoCheckUpdates, setIsAutoCheckUpdates] = useState(settings.autoCheckUpdates);
   const [isAlwaysOnTop, setIsAlwaysOnTop] = useState(settings.alwaysOnTop);
   const [isAlwaysShowStatusBar, setIsAlwaysShowStatusBar] = useState(settings.alwaysShowStatusBar);
-  const [isOpenLastBooks, setIsOpenLastBooks] = useState(settings.openLastBooks);
-  const [isAutoImportBooksOnOpen, setIsAutoImportBooksOnOpen] = useState(
-    settings.autoImportBooksOnOpen,
-  );
   const [alwaysInForeground, setAlwaysInForeground] = useState(settings.alwaysInForeground);
   const [savedBookCoverForLockScreen, setSavedBookCoverForLockScreen] = useState(
     settings.savedBookCoverForLockScreen || '',
@@ -119,26 +107,17 @@ const SettingsMenu: React.FC<SettingsMenuProps> = ({ onPullLibrary, setIsDropdow
     }
   };
 
-  const toggleAutoImportBooksOnOpen = () => {
-    const newValue = !settings.autoImportBooksOnOpen;
-    saveSysSettings(envConfig, 'autoImportBooksOnOpen', newValue);
-    setIsAutoImportBooksOnOpen(newValue);
-  };
-
   const toggleAutoCheckUpdates = () => {
     const newValue = !settings.autoCheckUpdates;
     saveSysSettings(envConfig, 'autoCheckUpdates', newValue);
     setIsAutoCheckUpdates(newValue);
   };
 
-  const toggleOpenLastBooks = () => {
-    const newValue = !settings.openLastBooks;
-    saveSysSettings(envConfig, 'openLastBooks', newValue);
-    setIsOpenLastBooks(newValue);
-  };
-
   const handleSetRootDir = () => {
-    setMigrateDataDirDialogVisible(true);
+    // The web build cannot relocate its data directory (the data lives in
+    // IndexedDB / Cache Storage), so this menu item is hidden behind
+    // `appService?.canCustomizeRootDir`, which is `false` on web. The handler
+    // is kept as a no-op so future native builds can reuse the menu wiring.
     setIsDropdownOpen?.(false);
   };
 
@@ -203,20 +182,12 @@ const SettingsMenu: React.FC<SettingsMenuProps> = ({ onPullLibrary, setIsDropdow
   };
 
   const toggleAlwaysInForeground = async () => {
-    const requestAlwaysInForeground = !settings.alwaysInForeground;
-
-    if (requestAlwaysInForeground) {
-      let permission = await invoke<Permissions>('plugin:native-tts|checkPermissions');
-      if (permission.postNotification !== 'granted') {
-        permission = await invoke<Permissions>('plugin:native-tts|requestPermissions', {
-          permissions: ['postNotification'],
-        });
-      }
-      if (permission.postNotification !== 'granted') return;
-    }
-
-    saveSysSettings(envConfig, 'alwaysInForeground', requestAlwaysInForeground);
-    setAlwaysInForeground(requestAlwaysInForeground);
+    // Background-mode toggling requires the Android Tauri `native-tts` plugin
+    // and is gated behind `appService?.isAndroidApp`, which is always `false`
+    // on the web build. The handler is kept as a no-op so future native
+    // builds can reuse the menu wiring.
+    saveSysSettings(envConfig, 'alwaysInForeground', !settings.alwaysInForeground);
+    setAlwaysInForeground(!settings.alwaysInForeground);
   };
 
   const handleSyncLibrary = () => {
@@ -292,20 +263,6 @@ const SettingsMenu: React.FC<SettingsMenuProps> = ({ onPullLibrary, setIsDropdow
         onClick={toggleAutoUploadBooks}
       />
 
-      {isTauriAppPlatform() && !appService?.isMobile && (
-        <MenuItem
-          label={_('Auto Import on File Open')}
-          toggled={isAutoImportBooksOnOpen}
-          onClick={toggleAutoImportBooksOnOpen}
-        />
-      )}
-      {isTauriAppPlatform() && (
-        <MenuItem
-          label={_('Open Last Book on Start')}
-          toggled={isOpenLastBooks}
-          onClick={toggleOpenLastBooks}
-        />
-      )}
       {appService?.hasUpdater && (
         <MenuItem
           label={_('Check Updates on Start')}

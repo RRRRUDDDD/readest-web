@@ -1,7 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { MdArrowBack } from 'react-icons/md';
 import clsx from 'clsx';
-import { openUrl } from '@tauri-apps/plugin-opener';
 
 import Popup from '@/components/Popup';
 import { Position } from '@/utils/sel';
@@ -9,10 +8,7 @@ import { useTranslation } from '@/hooks/useTranslation';
 import { useEnv } from '@/context/EnvContext';
 import { useCustomDictionaryStore } from '@/store/customDictionaryStore';
 import { getEnabledProviders } from '@/services/dictionaries/registry';
-import { isTauriAppPlatform } from '@/services/environment';
 import type { DictionaryProvider, DictionaryLookupOutcome } from '@/services/dictionaries/types';
-
-const isTauri = isTauriAppPlatform();
 
 interface DictionaryPopupProps {
   word: string;
@@ -148,24 +144,13 @@ const DictionaryPopup: React.FC<DictionaryPopupProps> = ({
    * Click delegation for provider-rendered anchors.
    *
    * Providers (Wikipedia "Read on Wikipedia →", error placeholders, etc.)
-   * append `<a>` elements imperatively to `ctx.container`. Those elements
-   * can't use the React `Link` component, so route external http(s)
-   * clicks through Tauri's `openUrl` here. Internal clicks (relative
-   * `/wiki/...` links from Wiktionary, intercepted by the provider for
-   * in-popup history) keep their existing behaviour — we only act when
-   * the raw `href` attribute starts with `http(s)://`.
+   * append `<a>` elements imperatively to `ctx.container`. The web build
+   * relies on `target="_blank"` + `rel="noopener noreferrer"` already set
+   * by the providers, so no extra delegation is needed.
    */
-  const handleContainerClick = useCallback((e: React.MouseEvent) => {
-    if (!isTauri) return; // Non-Tauri: target="_blank" + rel handles it.
-    if (e.defaultPrevented) return; // Provider already handled it.
-    const anchor = (e.target as Element | null)?.closest?.('a');
-    if (!anchor) return;
-    const rawHref = anchor.getAttribute('href');
-    if (!rawHref || !/^https?:\/\//i.test(rawHref)) return;
-    e.preventDefault();
-    void openUrl(rawHref).catch((err) => {
-      console.warn('Failed to open external URL', rawHref, err);
-    });
+  const handleContainerClick = useCallback(() => {
+    // No-op — see docblock above. Kept as a stable handler so React doesn't
+    // remount the wrapper when this file is hot-reloaded.
   }, []);
 
   const pushHistory = useCallback((tabId: string, nextWord: string) => {
@@ -417,14 +402,10 @@ const renderErrorPlaceholder = (
 
   if (!outcome.ok && outcome.reason === 'empty') {
     h1.innerText = _('No definitions found');
-    // Skip target="_blank" on Tauri — see the comment in
-    // `wikipediaProvider.ts`. The popup's container click handler routes
-    // the click through `openUrl` for Tauri.
-    const targetAttr = isTauri ? '' : ' target="_blank"';
     p.innerHTML = _('Search for {{word}} on the web.', {
       word: `<a href="https://www.google.com/search?q=${encodeURIComponent(
         word,
-      )}"${targetAttr} rel="noopener noreferrer" class="not-eink:text-primary underline">${word}</a>`,
+      )}" target="_blank" rel="noopener noreferrer" class="not-eink:text-primary underline">${word}</a>`,
     });
   } else if (!outcome.ok && outcome.reason === 'unsupported') {
     h1.innerText = _('Dictionary unsupported');

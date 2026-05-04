@@ -4,7 +4,7 @@ import { randomMd5 } from '@/utils/misc';
 import { LRUCache } from '@/utils/lru';
 import { genSSML } from '@/utils/ssml';
 import { fetchWithAuth } from '@/utils/fetch';
-import { getAPIBaseUrl, isTauriAppPlatform } from '@/services/environment';
+import { getAPIBaseUrl } from '@/services/environment';
 
 // Cloudflare Workers expose a global `WebSocketPair` that is not available in
 // browsers or Node.js. The Node `ws` package (used transitively via
@@ -402,49 +402,7 @@ export class EdgeSpeechTTS {
     const content = genSendContent(contentHeaders, ssml);
     const config = genSendContent(configHeaders, configContent);
 
-    if (isTauriAppPlatform()) {
-      return new Promise(async (resolve, reject) => {
-        try {
-          const TauriWebSocket = (await import('@tauri-apps/plugin-websocket')).default;
-          const ws = await TauriWebSocket.connect(url, { headers: baseHeaders });
-          let audioData = new ArrayBuffer(0);
-          const messageUnlisten = await ws.addListener((msg) => {
-            if (msg.type === 'Text') {
-              const { headers } = getHeadersAndData(msg.data as string);
-              if (headers['Path'] === 'turn.end') {
-                ws.disconnect();
-                messageUnlisten();
-                if (!audioData.byteLength) {
-                  return reject(new Error('No audio data received.'));
-                }
-                const res = new Response(audioData);
-                resolve(res);
-              }
-            } else if (msg.type === 'Binary') {
-              let buffer: ArrayBufferLike;
-              if (msg.data instanceof Uint8Array) {
-                buffer = msg.data.buffer;
-              } else {
-                buffer = new Uint8Array(msg.data).buffer;
-              }
-              const dataView = new DataView(buffer);
-              const headerLength = dataView.getInt16(0);
-              if (buffer.byteLength > headerLength + 2) {
-                const newBody = buffer.slice(2 + headerLength);
-                const merged = new Uint8Array(audioData.byteLength + newBody.byteLength);
-                merged.set(new Uint8Array(audioData), 0);
-                merged.set(new Uint8Array(newBody), audioData.byteLength);
-                audioData = merged.buffer;
-              }
-            }
-          });
-          await ws.send(config);
-          await ws.send(content);
-        } catch (error) {
-          reject(new Error(`WebSocket error occurred: ${error}`));
-        }
-      });
-    } else if (isCloudflareWorkers()) {
+    if (isCloudflareWorkers()) {
       return new Promise<Response>((resolve, reject) => {
         (async () => {
           try {

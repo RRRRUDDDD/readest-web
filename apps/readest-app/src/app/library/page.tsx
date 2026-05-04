@@ -35,9 +35,6 @@ import { useOPDSSubscriptions } from '@/hooks/useOPDSSubscriptions';
 import { useBookDataStore } from '@/store/bookDataStore';
 import { useTransferStore } from '@/store/transferStore';
 import { useScreenWakeLock } from '@/hooks/useScreenWakeLock';
-import { useAppUrlIngress } from '@/hooks/useAppUrlIngress';
-import { useOpenWithBooks } from '@/hooks/useOpenWithBooks';
-import { useOpenAnnotationLink } from '@/hooks/useOpenAnnotationLink';
 import { useKeyDownActions } from '@/hooks/useKeyDownActions';
 import { SelectedFile, useFileSelector } from '@/hooks/useFileSelector';
 import { handleClose, handleToggleFullScreen, quitApp } from '@/utils/window';
@@ -147,9 +144,6 @@ const LibraryPageContent = ({ searchParams }: { searchParams: ReadonlyURLSearchP
   useTheme({ systemUIVisible: true, appThemeColor: 'base-200' });
   useUICSS();
 
-  useAppUrlIngress();
-  useOpenWithBooks();
-  useOpenAnnotationLink();
   useTransferQueue(libraryLoaded);
 
   const { pullLibrary, pushLibrary } = useBooksSync();

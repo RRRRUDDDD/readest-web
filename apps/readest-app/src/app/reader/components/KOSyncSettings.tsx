@@ -1,7 +1,6 @@
 import clsx from 'clsx';
 import React, { Fragment, useState, useEffect, useMemo, useCallback } from 'react';
 import { md5 } from 'js-md5';
-import { type as osType } from '@tauri-apps/plugin-os';
 import { useEnv } from '@/context/EnvContext';
 import { useTranslation } from '@/hooks/useTranslation';
 import { useSettingsStore } from '@/store/settingsStore';
@@ -87,13 +86,9 @@ export const KOSyncSettingsWindow: React.FC = () => {
 
     const getOsName = async () => {
       let name = '';
-      if (appService?.appPlatform === 'tauri') {
-        name = await osType();
-      } else {
-        const platform = getOSPlatform();
-        if (platform !== 'unknown') {
-          name = platform;
-        }
+      const platform = getOSPlatform();
+      if (platform !== 'unknown') {
+        name = platform;
       }
       setOsName(formatOsName(name));
     };

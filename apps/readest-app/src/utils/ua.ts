@@ -15,14 +15,6 @@ export const parseWebViewInfo = (appService: AppService | null): string => {
     // macOS WebView
     const webkitMatch = ua.match(/AppleWebKit\/([0-9.]+)/);
     return webkitMatch ? `WebView ${webkitMatch[1]}` : 'macOS WebView';
-  } else if (appService?.appPlatform === 'tauri' && appService?.osPlatform === 'windows') {
-    // Windows WebView2
-    const match = ua.match(/Edg\/([0-9.]+)/);
-    return match ? `Edge ${match[1]}` : 'Edge WebView2';
-  } else if (appService?.appPlatform === 'tauri' && appService?.osPlatform === 'linux') {
-    // Linux WebView
-    const match = ua.match(/AppleWebKit\/([0-9.]+)/);
-    return match ? `WebView ${match[1]}` : 'Linux WebView';
   } else if (ua.includes('CriOS') && ua.includes('Mobile/') && ua.includes('Safari')) {
     // iOS Chrome WebView
     const match = ua.match(/CriOS\/([0-9.]+)/);

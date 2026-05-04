@@ -6,15 +6,10 @@ import { useSettingsStore } from '@/store/settingsStore';
 import { useTranslation } from '@/hooks/useTranslation';
 import { useAppRouter } from '@/hooks/useAppRouter';
 import { useLongPress } from '@/hooks/useLongPress';
-import { Menu, MenuItem } from '@tauri-apps/api/menu';
-import { revealItemInDir } from '@tauri-apps/plugin-opener';
-import { eventDispatcher } from '@/utils/event';
-import { getOSPlatform } from '@/utils/misc';
 import { throttle } from '@/utils/throttle';
 import { navigateToReader, showReaderWindow } from '@/utils/nav';
 import { LibraryCoverFitType, LibraryViewModeType } from '@/types/settings';
 import { BOOK_UNGROUPED_ID, BOOK_UNGROUPED_NAME } from '@/services/constants';
-import { FILE_REVEAL_LABELS, FILE_REVEAL_PLATFORMS } from '@/utils/os';
 import { Book, BooksGroup, ReadingStatus } from '@/types/book';
 import { md5Fingerprint } from '@/utils/md5';
 import BookItem from './BookItem';
@@ -112,15 +107,16 @@ const BookshelfItem: React.FC<BookshelfItemProps> = ({
   transferProgress,
   setLoading,
   toggleSelection,
-  handleGroupBooks,
+  handleGroupBooks: _handleGroupBooks,
   handleBookUpload,
   handleBookDownload,
   handleSetSelectMode,
   handleShowDetailsBook,
   handleLibraryNavigation,
-  handleUpdateReadingStatus,
+  handleUpdateReadingStatus: _handleUpdateReadingStatus,
 }) => {
   const _ = useTranslation();
+  void _;
   const router = useAppRouter();
   const { envConfig, appService } = useEnv();
   const { settings } = useSettingsStore();
@@ -187,131 +183,16 @@ const BookshelfItem: React.FC<BookshelfItemProps> = ({
     [isSelectMode, handleLibraryNavigation],
   );
 
-  const bookContextMenuHandler = async (book: Book) => {
+  const bookContextMenuHandler = async (_book: Book) => {
+    // Native Tauri context menus are unavailable on the web build (the Menu /
+    // MenuItem APIs require a native shell). The handler is a no-op gated by
+    // `appService?.hasContextMenu` (always false on web). Right-click on a
+    // book in the web library falls through to the browser's default menu.
     if (!appService?.hasContextMenu) return;
-    const osPlatform = getOSPlatform();
-    const fileRevealLabel =
-      FILE_REVEAL_LABELS[osPlatform as FILE_REVEAL_PLATFORMS] || FILE_REVEAL_LABELS.default;
-    const selectBookMenuItem = await MenuItem.new({
-      text: itemSelected ? _('Deselect Book') : _('Select Book'),
-      action: async () => {
-        if (!isSelectMode) handleSetSelectMode(true);
-        toggleSelection(book.hash);
-      },
-    });
-    const groupBooksMenuItem = await MenuItem.new({
-      text: _('Group Books'),
-      action: async () => {
-        if (!isSelectMode) handleSetSelectMode(true);
-        if (!itemSelected) {
-          toggleSelection(book.hash);
-        }
-        handleGroupBooks();
-      },
-    });
-    const markAsFinishedMenuItem = await MenuItem.new({
-      text: _('Mark as Finished'),
-      action: async () => {
-        handleUpdateReadingStatus(book, 'finished');
-      },
-    });
-    const markAsUnreadMenuItem = await MenuItem.new({
-      text: _('Mark as Unread'),
-      action: async () => {
-        handleUpdateReadingStatus(book, 'unread');
-      },
-    });
-    const clearStatusMenuItem = await MenuItem.new({
-      text: _('Clear Status'),
-      action: async () => {
-        handleUpdateReadingStatus(book, undefined);
-      },
-    });
-    const showBookInFinderMenuItem = await MenuItem.new({
-      text: _(fileRevealLabel),
-      action: async () => {
-        const folder = `${settings.localBooksDir}/${book.hash}`;
-        revealItemInDir(folder);
-      },
-    });
-    const showBookDetailsMenuItem = await MenuItem.new({
-      text: _('Show Book Details'),
-      action: async () => {
-        showBookDetailsModal(book);
-      },
-    });
-    const downloadBookMenuItem = await MenuItem.new({
-      text: _('Download Book'),
-      action: async () => {
-        handleBookDownload(book, { queued: true });
-      },
-    });
-    const uploadBookMenuItem = await MenuItem.new({
-      text: _('Upload Book'),
-      action: async () => {
-        handleBookUpload(book);
-      },
-    });
-    const deleteBookMenuItem = await MenuItem.new({
-      text: _('Delete'),
-      action: async () => {
-        eventDispatcher.dispatch('delete-books', { ids: [book.hash] });
-      },
-    });
-    const menu = await Menu.new();
-    menu.append(selectBookMenuItem);
-    menu.append(groupBooksMenuItem);
-    if (book.readingStatus === 'finished') {
-      menu.append(markAsUnreadMenuItem);
-    } else {
-      menu.append(markAsFinishedMenuItem);
-    }
-    // show "Clear Status" option when book has an explicit status set
-    if (book.readingStatus === 'finished' || book.readingStatus === 'unread') {
-      menu.append(clearStatusMenuItem);
-    }
-    menu.append(showBookDetailsMenuItem);
-    menu.append(showBookInFinderMenuItem);
-    if (book.uploadedAt && !book.downloadedAt) {
-      menu.append(downloadBookMenuItem);
-    }
-    if (!book.uploadedAt && book.downloadedAt) {
-      menu.append(uploadBookMenuItem);
-    }
-    menu.append(deleteBookMenuItem);
-    menu.popup();
   };
 
-  const groupContextMenuHandler = async (group: BooksGroup) => {
+  const groupContextMenuHandler = async (_group: BooksGroup) => {
     if (!appService?.hasContextMenu) return;
-    const selectGroupMenuItem = await MenuItem.new({
-      text: itemSelected ? _('Deselect Group') : _('Select Group'),
-      action: async () => {
-        if (!isSelectMode) handleSetSelectMode(true);
-        toggleSelection(group.id);
-      },
-    });
-    const groupBooksMenuItem = await MenuItem.new({
-      text: _('Group Books'),
-      action: async () => {
-        if (!isSelectMode) handleSetSelectMode(true);
-        if (!itemSelected) {
-          toggleSelection(group.id);
-        }
-        handleGroupBooks();
-      },
-    });
-    const deleteGroupMenuItem = await MenuItem.new({
-      text: _('Delete'),
-      action: async () => {
-        eventDispatcher.dispatch('delete-books', { ids: [group.id] });
-      },
-    });
-    const menu = await Menu.new();
-    menu.append(selectGroupMenuItem);
-    menu.append(groupBooksMenuItem);
-    menu.append(deleteGroupMenuItem);
-    menu.popup();
   };
 
   // eslint-disable-next-line react-hooks/exhaustive-deps

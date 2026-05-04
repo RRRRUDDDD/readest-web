@@ -1,10 +1,9 @@
 import { md5 } from 'js-md5';
 import { Book } from '@/types/book';
 import { KOSyncSettings } from '@/types/settings';
-import { fetch as tauriFetch } from '@tauri-apps/plugin-http';
 import { KoSyncProxyPayload } from '@/types/kosync';
 import { isLanAddress } from '@/utils/network';
-import { getAPIBaseUrl, isTauriAppPlatform } from '../environment';
+import { getAPIBaseUrl } from '../environment';
 
 /**
  * Interface for KOSync progress response from the server
@@ -57,8 +56,7 @@ export class KOSyncClient {
     const attempt = async (): Promise<Response> => {
       const headers = buildHeaders();
 
-      if (this.isLanServer || isTauriAppPlatform()) {
-        const fetch = isTauriAppPlatform() ? tauriFetch : window.fetch;
+      if (this.isLanServer) {
         const directUrl = `${this.config.serverUrl}${endpoint}`;
 
         return await fetch(directUrl, {
@@ -69,10 +67,6 @@ export class KOSyncClient {
             ...Object.fromEntries(headers.entries()),
           },
           body,
-          danger: {
-            acceptInvalidCerts: true,
-            acceptInvalidHostnames: true,
-          },
         });
       }
 

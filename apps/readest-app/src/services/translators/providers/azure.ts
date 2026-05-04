@@ -1,6 +1,4 @@
 import { stubTranslation as _ } from '@/utils/misc';
-import { fetch as tauriFetch } from '@tauri-apps/plugin-http';
-import { isTauriAppPlatform } from '@/services/environment';
 import { TranslationProvider } from '../types';
 import { normalizeToFullLang } from '@/utils/lang';
 
@@ -19,7 +17,6 @@ const getAuthToken = async (): Promise<string> => {
   }
 
   try {
-    const fetch = isTauriAppPlatform() ? tauriFetch : window.fetch;
     const tokenResponse = await fetch('https://edge.microsoft.com/translate/auth', {
       method: 'GET',
       headers: {
@@ -72,7 +69,6 @@ export const azureProvider: TranslationProvider = {
       }
 
       const token = await getAuthToken();
-      const fetch = isTauriAppPlatform() ? tauriFetch : window.fetch;
       const response = await fetch(`${url}?${params.toString()}`, {
         method: 'POST',
         headers: {

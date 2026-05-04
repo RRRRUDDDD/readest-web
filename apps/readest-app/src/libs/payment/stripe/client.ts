@@ -1,8 +1,7 @@
 import posthog from 'posthog-js';
 import Stripe from 'stripe';
 import { loadStripe, Stripe as StripeClient } from '@stripe/stripe-js';
-import { getAPIBaseUrl, isTauriAppPlatform, isWebAppPlatform } from '@/services/environment';
-import { openUrl } from '@tauri-apps/plugin-opener';
+import { getAPIBaseUrl } from '@/services/environment';
 import { getAccessToken } from '@/utils/access';
 import { StripeProductMetadata } from '@/types/payment';
 import { AvailablePlan, PlanType } from '@/types/quota';
@@ -47,7 +46,6 @@ export const createStripeCheckoutSession = async (
   planType: PlanType = 'subscription',
 ): Promise<StripeCheckoutResponse> => {
   const token = await getAccessToken();
-  const isEmbeddedCheckout = isTauriAppPlatform();
 
   const response = await fetch(WEB_STRIPE_CHECKOUT_URL, {
     method: 'POST',
@@ -55,7 +53,7 @@ export const createStripeCheckoutSession = async (
       'Content-Type': 'application/json',
       Authorization: `Bearer ${token}`,
     },
-    body: JSON.stringify({ priceId: productId, planType, embedded: isEmbeddedCheckout }),
+    body: JSON.stringify({ priceId: productId, planType, embedded: false }),
   });
 
   if (!response.ok) {
@@ -67,11 +65,7 @@ export const createStripeCheckoutSession = async (
 
 export const redirectToStripeCheckout = async (url?: string): Promise<void> => {
   if (url) {
-    if (isWebAppPlatform()) {
-      window.location.href = url;
-    } else if (isTauriAppPlatform()) {
-      await openUrl(url);
-    }
+    window.location.href = url;
   } else {
     throw new Error('No checkout URL returned from the Stripe API');
   }
@@ -98,11 +92,7 @@ export const createStripePortalSession = async () => {
 };
 
 export const redirectToStripePortal = async (url: string): Promise<void> => {
-  if (isWebAppPlatform()) {
-    window.location.href = url;
-  } else if (isTauriAppPlatform()) {
-    await openUrl(url);
-  }
+  window.location.href = url;
 };
 
 export const handleStripeCheckoutError = (error: string) => {

@@ -1,5 +1,4 @@
 import { BookConfig, BookNote, HighlightColor, HighlightStyle } from '@/types/book';
-import { mergeBookConfigs } from '@/services/backupService';
 import { md5 } from 'js-md5';
 import { AnnotationImportProvider } from '../types';
 
@@ -138,30 +137,13 @@ export function parseFoliateData(json: string): FoliateData | null {
 export const foliateProvider: AnnotationImportProvider = {
   name: 'foliate',
   isAvailable: (appService) => appService.isLinuxApp,
-  importAnnotations: async (appService, identifier, config) => {
-    if (config.foliateImportedAt) return config;
-    try {
-      const { dataDir } = await import('@tauri-apps/api/path');
-      const dir = await dataDir();
-      const path = getFoliateDataPath(dir, identifier);
-
-      if (!(await appService.exists(path, 'None'))) {
-        return config;
-      }
-
-      const json = (await appService.readFile(path, 'None', 'text')) as string;
-      const foliateData = parseFoliateData(json);
-      if (!foliateData) {
-        return config;
-      }
-
-      const converted = convertFoliateData(config.bookHash ?? '', foliateData);
-      const merged = mergeBookConfigs(config, converted) as BookConfig;
-      merged.foliateImportedAt = Date.now();
-      return merged;
-    } catch (error) {
-      console.warn('Failed to import Foliate data:', error);
-      return config;
-    }
+  importAnnotations: async (_appService, _identifier, config) => {
+    // Foliate annotation import is only meaningful on the Linux desktop app
+    // because it reads `~/.local/share/com.github.johnfactotum.Foliate/` from
+    // the user's home directory. The web build has no filesystem access, so
+    // this is a no-op. The conversion helpers above are kept exported so the
+    // existing test suite (and any future native re-introduction) can reuse
+    // them.
+    return config;
   },
 };

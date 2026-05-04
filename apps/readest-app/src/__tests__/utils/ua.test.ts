@@ -53,28 +53,20 @@ describe('parseWebViewInfo', () => {
     expect(result).toBe('WebView 605.1.15');
   });
 
-  it('should detect Windows WebView2', () => {
+  it('should detect Windows desktop Edge browser', () => {
     setUserAgent(
       'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36 Edg/120.0.2210.91',
     );
-    const appService = {
-      appPlatform: 'tauri',
-      osPlatform: 'windows',
-    } as unknown as AppServiceParam;
-    const result = parseWebViewInfo(appService);
+    const result = parseWebViewInfo(null);
     expect(result).toBe('Edge 120.0.2210.91');
   });
 
-  it('should detect Linux WebView', () => {
+  it('should detect Linux desktop Chrome browser', () => {
     setUserAgent(
       'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
     );
-    const appService = {
-      appPlatform: 'tauri',
-      osPlatform: 'linux',
-    } as unknown as AppServiceParam;
-    const result = parseWebViewInfo(appService);
-    expect(result).toBe('WebView 537.36');
+    const result = parseWebViewInfo(null);
+    expect(result).toBe('Chrome 120.0.0.0');
   });
 
   it('should detect desktop Chrome on macOS', () => {

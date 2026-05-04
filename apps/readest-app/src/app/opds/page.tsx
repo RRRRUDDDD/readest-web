@@ -5,10 +5,8 @@ import { md5 } from 'js-md5';
 import { useEffect, useState, useCallback, useRef, useMemo } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { isOPDSCatalog, getPublication, getFeed, getOpenSearch } from 'foliate-js/opds.js';
-import { openUrl } from '@tauri-apps/plugin-opener';
 import { useEnv } from '@/context/EnvContext';
 import { useAuth } from '@/context/AuthContext';
-import { isWebAppPlatform } from '@/services/environment';
 import { downloadFile } from '@/libs/storage';
 import { Toast } from '@/components/Toast';
 import { useThemeStore } from '@/store/themeStore';
@@ -173,7 +171,9 @@ export default function BrowserPage() {
       setError(null);
 
       try {
-        const useProxy = isWebAppPlatform();
+        // The web build always proxies OPDS requests through the API
+        // (the browser blocks direct cross-origin fetches).
+        const useProxy = true;
         const username = usernameRef.current || '';
         const password = passwordRef.current || '';
         const customHeaders = customHeadersRef.current;
@@ -420,11 +420,7 @@ export default function BrowserPage() {
         const url = resolveURL(href, state.baseURL);
         const parsed = parseMediaType(type);
         if (parsed?.mediaType === MIME.HTML) {
-          if (isWebAppPlatform()) {
-            window.open(url, '_blank');
-          } else {
-            await openUrl(url);
-          }
+          window.open(url, '_blank');
           return;
         } else {
           const username = usernameRef.current || '';

@@ -15,9 +15,6 @@
 import type { DictionaryProvider, DictionaryLookupOutcome } from '../types';
 import { BUILTIN_PROVIDER_IDS } from '../types';
 import { stubTranslation as _ } from '@/utils/misc';
-import { isTauriAppPlatform } from '@/services/environment';
-
-const isTauri = isTauriAppPlatform();
 
 export const wikipediaProvider: DictionaryProvider = {
   id: BUILTIN_PROVIDER_IDS.wikipedia,
@@ -83,12 +80,7 @@ export const wikipediaProvider: DictionaryProvider = {
       linkWrapper.className = 'mt-3 px-2 text-sm';
       const link = document.createElement('a');
       link.href = articleUrl;
-      // Skip target="_blank" on Tauri. iOS WebView dispatches a separate
-      // "open externally" path for `_blank` anchors that goes through the
-      // shell scope and fails with "Operation not permitted" — even when
-      // a click handler `preventDefault`s. The popup's container click
-      // handler routes the click through `openUrl` instead.
-      if (!isTauri) link.target = '_blank';
+      link.target = '_blank';
       link.rel = 'noopener noreferrer';
       link.className = 'not-eink:text-primary underline';
       link.textContent = _('Read on Wikipedia →');

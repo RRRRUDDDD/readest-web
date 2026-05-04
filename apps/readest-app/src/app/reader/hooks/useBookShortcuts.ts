@@ -1,12 +1,11 @@
 import { useEffect, useRef } from 'react';
 import { useReaderStore } from '@/store/readerStore';
 import { useNotebookStore } from '@/store/notebookStore';
-import { isTauriAppPlatform } from '@/services/environment';
 import { useSidebarStore } from '@/store/sidebarStore';
 import { useSettingsStore } from '@/store/settingsStore';
 import { useBookDataStore } from '@/store/bookDataStore';
 import { useCommandPalette } from '@/components/command-palette';
-import { handleClose, handleToggleFullScreen } from '@/utils/window';
+import { handleToggleFullScreen } from '@/utils/window';
 import { eventDispatcher } from '@/utils/event';
 import { setShortcutsDialogVisible } from '@/components/KeyboardShortcutsHelp';
 import { MAX_ZOOM_LEVEL, MIN_ZOOM_LEVEL, ZOOM_STEP } from '@/services/constants';
@@ -181,22 +180,15 @@ const useBookShortcuts = ({ sideBarBookKey, bookKeys }: UseBookShortcutsProps) =
   };
 
   const toggleFullscreen = async () => {
-    if (isTauriAppPlatform()) {
-      await handleToggleFullScreen();
-    }
+    await handleToggleFullScreen();
   };
 
   const closeWindow = async () => {
-    if (isTauriAppPlatform()) {
-      await handleClose();
-    }
+    // No-op on web — closing the tab is handled by the browser.
   };
 
   const quitApp = async () => {
-    // on web platform use browser's default shortcut to close the tab
-    if (isTauriAppPlatform()) {
-      await quitApp();
-    }
+    // No-op on web — closing the tab is handled by the browser.
   };
 
   const showSearchBar = () => {

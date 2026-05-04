@@ -1,5 +1,3 @@
-import { fetch as tauriFetch } from '@tauri-apps/plugin-http';
-import { isTauriAppPlatform } from '@/services/environment';
 import { READEST_OPDS_USER_AGENT } from '@/services/constants';
 import { useSettingsStore } from '@/store/settingsStore';
 import { needsProxy, getProxiedURL, probeAuth } from '@/app/opds/utils/opdsReq';
@@ -56,10 +54,8 @@ export const createPseStreamPageLoader = (data: PseStreamData) => {
       ...(!useProxy ? customHeaders : {}),
       ...(!useProxy && authHeader ? { Authorization: authHeader } : {}),
     };
-    const fetch = isTauriAppPlatform() ? tauriFetch : window.fetch;
     const res = await fetch(fetchURL, {
       headers,
-      danger: { acceptInvalidCerts: true, acceptInvalidHostnames: true },
     });
     if (!res.ok) {
       throw new Error(`Failed to fetch page ${pageIndex}: ${res.statusText}`);

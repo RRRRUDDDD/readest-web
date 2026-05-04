@@ -9,7 +9,6 @@ import { TransformContext } from '@/services/transformers/types';
 import { proofreadTransformer } from '@/services/transformers/proofread';
 import { useTranslation } from '@/hooks/useTranslation';
 import { TTSController, TTSMark, TTSHighlightOptions, TTSVoicesGroup } from '@/services/tts';
-import { TauriMediaSession } from '@/libs/mediaSession';
 import { eventDispatcher } from '@/utils/event';
 import { genSSMLRaw, parseSSMLLang } from '@/utils/ssml';
 import { throttle } from '@/utils/throttle';
@@ -158,21 +157,12 @@ export const useTTSControl = ({ bookKey, onRequestHidePanel }: UseTTSControlProp
 
       if (metadata.shouldUpdate && mediaSessionRef.current) {
         const mediaSession = mediaSessionRef.current;
-        if (mediaSession instanceof TauriMediaSession) {
-          mediaSession.updateMetadata({
-            title: metadata.title,
-            artist: metadata.artist,
-            album: metadata.album,
-            artwork: '',
-          });
-        } else {
-          mediaSession.metadata = new MediaMetadata({
-            title: metadata.title,
-            artist: metadata.artist,
-            album: metadata.album,
-            artwork: [{ src: coverImageUrl || '/icon.png', sizes: '512x512', type: 'image/png' }],
-          });
-        }
+        mediaSession.metadata = new MediaMetadata({
+          title: metadata.title,
+          artist: metadata.artist,
+          album: metadata.album,
+          artwork: [{ src: coverImageUrl || '/icon.png', sizes: '512x512', type: 'image/png' }],
+        });
       }
     };
 
@@ -562,11 +552,7 @@ export const useTTSControl = ({ bookKey, onRequestHidePanel }: UseTTSControlProp
 
     if (mediaSessionRef.current) {
       const mediaSession = mediaSessionRef.current;
-      if (mediaSession instanceof TauriMediaSession) {
-        await mediaSession.updatePlaybackState({ playing: !isPlaying });
-      } else {
-        mediaSession.playbackState = isPlaying ? 'paused' : 'playing';
-      }
+      mediaSession.playbackState = isPlaying ? 'paused' : 'playing';
     }
   }, [isPlaying, isPaused, mediaSessionRef]);
 

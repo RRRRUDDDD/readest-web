@@ -2,23 +2,22 @@ import { useRef } from 'react';
 import { useSettingsStore } from '@/store/settingsStore';
 import { useBookDataStore } from '@/store/bookDataStore';
 import { useReaderStore } from '@/store/readerStore';
-import { buildTTSMediaMetadata } from '@/utils/ttsMetadata';
 import { useTranslation } from '@/hooks/useTranslation';
 import { SILENCE_DATA } from '@/services/tts';
-import { getMediaSession, TauriMediaSession } from '@/libs/mediaSession';
-import { fetchImageAsBase64 } from '@/utils/image';
+import { getMediaSession } from '@/libs/mediaSession';
 
 interface UseTTSMediaSessionProps {
   bookKey: string;
 }
 
-export const useTTSMediaSession = ({ bookKey }: UseTTSMediaSessionProps) => {
+export const useTTSMediaSession = ({ bookKey: _bookKey }: UseTTSMediaSessionProps) => {
   const _ = useTranslation();
-  const { settings } = useSettingsStore();
-  const { getBookData } = useBookDataStore();
-  const { getProgress, getViewSettings } = useReaderStore();
+  void _;
+  void useSettingsStore;
+  void useBookDataStore;
+  void useReaderStore;
 
-  const mediaSessionRef = useRef<TauriMediaSession | MediaSession | null>(null);
+  const mediaSessionRef = useRef<MediaSession | null>(null);
   const unblockerAudioRef = useRef<HTMLAudioElement | null>(null);
 
   // this enables WebAudio to play even when the mute toggle switch is ON
@@ -56,56 +55,14 @@ export const useTTSMediaSession = ({ bookKey }: UseTTSMediaSessionProps) => {
     const mediaSession = getMediaSession();
     if (!mediaSession) return;
 
+    // Only the browser's `navigator.mediaSession` API is reachable from the
+    // web build. Setting metadata/active on it requires direct property
+    // assignment, which is handled by the consumer that owns the audio
+    // element. Keep the ref so callers can dispatch actions if needed.
     mediaSessionRef.current = mediaSession;
-
-    if (mediaSession instanceof TauriMediaSession) {
-      const bookData = getBookData(bookKey);
-      const progress = getProgress(bookKey);
-      const viewSettings = getViewSettings(bookKey);
-      if (!bookData || !bookData.book) return;
-      const { title, author, coverImageUrl } = bookData.book;
-      const { sectionLabel } = progress || {};
-      const ttsMediaMetadataMode = viewSettings?.ttsMediaMetadata ?? 'sentence';
-
-      let artworkImage = '/icon.png';
-      try {
-        artworkImage = await fetchImageAsBase64(coverImageUrl || '/icon.png');
-      } catch {
-        artworkImage = await fetchImageAsBase64('/icon.png');
-      }
-
-      await mediaSession.setActive({
-        active: true,
-        keepAppInForeground: settings.alwaysInForeground,
-        notificationTitle: _('Read Aloud'),
-        notificationText: _('Ready to read aloud'),
-        foregroundServiceTitle: _('Read Aloud'),
-        foregroundServiceText: _('Ready to read aloud'),
-      });
-      const metadata = buildTTSMediaMetadata({
-        markText: title,
-        markName: '0',
-        sectionLabel: sectionLabel || '',
-        title,
-        author,
-        ttsMediaMetadata: ttsMediaMetadataMode,
-      });
-      mediaSession.updateMetadata({
-        title: metadata.title,
-        artist: metadata.artist,
-        album: metadata.album,
-        artwork: artworkImage,
-      });
-    }
   };
 
   const deinitMediaSession = async () => {
-    if (mediaSessionRef.current && mediaSessionRef.current instanceof TauriMediaSession) {
-      await mediaSessionRef.current.setActive({
-        active: false,
-        keepAppInForeground: settings.alwaysInForeground,
-      });
-    }
     mediaSessionRef.current = null;
   };
 

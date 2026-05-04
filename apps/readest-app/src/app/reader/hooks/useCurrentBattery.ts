@@ -1,7 +1,4 @@
 import { useEffect, useState } from 'react';
-import { useEnv } from '@/context/EnvContext';
-import { getBatteryInfo } from 'tauri-plugin-device-info-api';
-import { isTauriAppPlatform } from '@/services/environment';
 
 interface BatteryManager extends EventTarget {
   level: number;
@@ -10,7 +7,6 @@ interface BatteryManager extends EventTarget {
   dischargingTime: number;
 }
 export function useCurrentBatteryStatus(enabled: boolean) {
-  const { appService } = useEnv();
   const [batteryLevel, setBatteryLevel] = useState<number | null>(null);
 
   useEffect(() => {
@@ -43,24 +39,6 @@ export function useCurrentBatteryStatus(enabled: boolean) {
       }
     };
   }, [enabled]);
-
-  useEffect(() => {
-    if (!enabled || !appService || !isTauriAppPlatform()) return;
-
-    const fetchBatteryInfo = async () => {
-      try {
-        const info = await getBatteryInfo();
-        if (info.level !== undefined) {
-          setBatteryLevel(Math.round(info.level));
-        }
-      } catch (error) {
-        console.error('Failed to fetch battery info:', error);
-      }
-    };
-    fetchBatteryInfo();
-    const interval = setInterval(fetchBatteryInfo, 60_000);
-    return () => clearInterval(interval);
-  }, [appService, enabled]);
 
   return batteryLevel;
 }

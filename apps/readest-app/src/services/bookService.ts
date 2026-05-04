@@ -36,7 +36,6 @@ import { convertTxtToEpubWithFallback } from '@/utils/txt-worker';
 import { svg2png } from '@/utils/svg';
 import { normalizeMetadataIsbn } from '@/utils/isbn';
 import { BookFileNotFoundError } from './errors';
-import { fetch as tauriFetch } from '@tauri-apps/plugin-http';
 
 export function buildBookLookupIndex(books: Book[]): BookLookupIndex {
   const byHash = new Map<string, Book>();
@@ -98,17 +97,6 @@ function imageToArrayBuffer(
     }
     if (ctx.appPlatform === 'web' && imageUrl && imageUrl.startsWith('blob:')) {
       fetch(imageUrl)
-        .then((response) => response.arrayBuffer())
-        .then(resolve)
-        .catch(reject);
-    } else if (ctx.appPlatform === 'tauri' && imageFile) {
-      ctx.fs
-        .openFile(imageFile, 'None')
-        .then((file) => file.arrayBuffer())
-        .then(resolve)
-        .catch(reject);
-    } else if (ctx.appPlatform === 'tauri' && imageUrl) {
-      tauriFetch(imageUrl, { method: 'GET' })
         .then((response) => response.arrayBuffer())
         .then(resolve)
         .catch(reject);

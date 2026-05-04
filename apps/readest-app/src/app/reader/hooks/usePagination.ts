@@ -6,8 +6,6 @@ import { useReaderStore } from '@/store/readerStore';
 import { useBookDataStore } from '@/store/bookDataStore';
 import { useDeviceControlStore } from '@/store/deviceStore';
 import { eventDispatcher } from '@/utils/event';
-import { isTauriAppPlatform } from '@/services/environment';
-import { getWindowLogicalPosition } from '@/utils/window';
 import { getReadingRulerMoveDirection } from '../utils/readingRuler';
 import { SmoothScroller, type SmoothScrollTarget } from '../utils/smoothWheelScroll';
 import { useTouchInterceptor } from './useTouchInterceptor';
@@ -144,21 +142,7 @@ export const usePagination = (
           if (viewElement) {
             const { screenX } = msg.data;
             const viewRect = viewElement.getBoundingClientRect();
-            let windowStartX;
-            // Currently for tauri APP the window.screenX is always 0
-            if (isTauriAppPlatform()) {
-              if (appService?.isMobile) {
-                windowStartX = 0;
-              } else {
-                const windowPosition = (await getWindowLogicalPosition()) as {
-                  x: number;
-                  y: number;
-                };
-                windowStartX = windowPosition.x;
-              }
-            } else {
-              windowStartX = window.screenX;
-            }
+            const windowStartX = window.screenX;
             const viewStartX = windowStartX + viewRect.left;
             const viewCenterX = viewStartX + viewRect.width / 2;
             const consumed = eventDispatcher.dispatchSync('iframe-single-click');

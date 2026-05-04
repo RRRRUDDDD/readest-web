@@ -23,9 +23,7 @@ import { useSettingsStore } from '@/store/settingsStore';
 import { useCustomFontStore } from '@/store/customFontStore';
 import { useResponsiveSize } from '@/hooks/useResponsiveSize';
 import { getOSPlatform, isCJKEnv } from '@/utils/misc';
-import { getSysFontsList } from '@/utils/bridge';
 import { isCJKStr } from '@/utils/lang';
-import { isTauriAppPlatform } from '@/services/environment';
 import { useResetViewSettings } from '@/hooks/useResetSettings';
 import { saveViewSettings } from '@/helpers/settings';
 import { SettingsPanelPanelProp } from './SettingsDialog';
@@ -39,9 +37,6 @@ const genCJKFontsList = (sysFonts: string[]) => {
     .filter((font) => !CJK_EXCLUDE_PATTENS.test(font))
     .sort((a, b) => a.localeCompare(b));
 };
-
-const isSymbolicFontName = (font: string) =>
-  /emoji|icons|symbol|dingbats|ornaments|webdings|wingdings|miuiex/i.test(font);
 
 interface FontFaceProps {
   className?: string;
@@ -130,7 +125,7 @@ const FontPanel: React.FC<SettingsPanelPanelProp> = ({ bookKey, onRegisterReset 
     default:
       break;
   }
-  const [sysFonts, setSysFonts] = useState<string[]>(defaultSysFonts);
+  const [sysFonts] = useState<string[]>(defaultSysFonts);
   const [defaultFont, setDefaultFont] = useState(viewSettings.defaultFont);
   const [defaultFontSize, setDefaultFontSize] = useState(viewSettings.defaultFontSize);
   const [minFontSize, setMinFontSize] = useState(viewSettings.minimumFontSize);
@@ -191,32 +186,6 @@ const FontPanel: React.FC<SettingsPanelPanelProp> = ({ bookKey, onRegisterReset 
     setSansSerifFont(viewSettings.sansSerifFont);
     setMonospaceFont(viewSettings.monospaceFont);
   }, [viewSettings.serifFont, viewSettings.sansSerifFont, viewSettings.monospaceFont]);
-
-  useEffect(() => {
-    if (isTauriAppPlatform() && appService && !appService.isAndroidApp) {
-      getSysFontsList().then((res) => {
-        if (res.error || Object.keys(res.fonts).length === 0) {
-          console.error('Failed to get system fonts list:', res.error);
-          return;
-        }
-        const processedFonts: string[] = [];
-        Object.entries(res.fonts).forEach(([fontName, fontFamily]) => {
-          if (!fontName || isSymbolicFontName(fontName)) return;
-
-          const fontsInFamily = Object.entries(res.fonts).filter(
-            ([_, family]) => family === fontFamily,
-          );
-
-          if (fontsInFamily.length === 1) {
-            processedFonts.push(fontFamily);
-          } else {
-            processedFonts.push(fontName);
-          }
-        });
-        setSysFonts([...new Set(processedFonts)].sort((a, b) => a.localeCompare(b)));
-      });
-    }
-  }, [appService]);
 
   useEffect(() => {
     saveViewSettings(envConfig, bookKey, 'defaultFont', defaultFont);

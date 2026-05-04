@@ -1,7 +1,5 @@
 import { Book, BookConfig, BookNote } from '@/types/book';
 import { getContentMd5 } from '@/utils/misc';
-import { fetch as tauriFetch } from '@tauri-apps/plugin-http';
-import { isTauriAppPlatform } from '@/services/environment';
 import { HardcoverSyncMapStore } from './HardcoverSyncMapStore';
 import {
   QUERY_GET_USER_ID,
@@ -54,7 +52,11 @@ export class HardcoverClient {
   }
 
   private get endpoint() {
-    return isTauriAppPlatform() ? this.directEndpoint : this.proxyEndpoint;
+    // The web build always goes through the API proxy because direct calls
+    // would be blocked by CORS. The directEndpoint field is kept for clarity
+    // and future native builds.
+    void this.directEndpoint;
+    return this.proxyEndpoint;
   }
 
   private formatDate(date: Date): string {
@@ -128,8 +130,7 @@ export class HardcoverClient {
   ): Promise<TData> {
     await this.throttleRequest();
 
-    const fetchFn = isTauriAppPlatform() ? tauriFetch : window.fetch;
-    const res = await fetchFn(this.endpoint, {
+    const res = await fetch(this.endpoint, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',

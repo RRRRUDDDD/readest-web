@@ -1,11 +1,5 @@
 import { md5 } from 'js-md5';
-import {
-  getAPIBaseUrl,
-  getNodeAPIBaseUrl,
-  isTauriAppPlatform,
-  isWebAppPlatform,
-} from '@/services/environment';
-import { fetch as tauriFetch } from '@tauri-apps/plugin-http';
+import { getAPIBaseUrl, getNodeAPIBaseUrl, isWebAppPlatform } from '@/services/environment';
 import { READEST_OPDS_USER_AGENT } from '@/services/constants';
 import {
   OPDSCustomHeaders,
@@ -232,11 +226,9 @@ export const probeAuth = async (
   };
 
   // Probe with HEAD request
-  const fetch = isTauriAppPlatform() ? tauriFetch : window.fetch;
   const res = await fetch(fetchURL, {
     method: 'HEAD',
     headers,
-    danger: { acceptInvalidCerts: true, acceptInvalidHostnames: true },
   });
 
   // Check if authentication is required
@@ -341,12 +333,10 @@ export const fetchWithAuth = async (
     ...(options.headers as Record<string, string>),
   };
 
-  const fetch = isTauriAppPlatform() ? tauriFetch : window.fetch;
   let res = await fetch(fetchURL, {
     ...options,
     method: options.method || 'GET',
     headers,
-    danger: { acceptInvalidCerts: true, acceptInvalidHostnames: true },
   });
 
   // Handle authentication if needed
@@ -376,7 +366,6 @@ export const fetchWithAuth = async (
           ...options,
           method: options.method || 'GET',
           headers: useProxy ? headers : { ...headers, Authorization: authHeader },
-          danger: { acceptInvalidCerts: true, acceptInvalidHostnames: true },
         });
       }
     }

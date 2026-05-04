@@ -200,13 +200,11 @@ export const useTextSelector = (
   };
   const handleSelectionchange = (doc: Document, index: number) => {
     // Available on iOS, Android and Desktop, fired when the selection is changed.
-    // On Android native app, this is the primary way to detect text selection.
     // On web with touch/pen in scroll mode, pointerup never fires (pointercancel
-    // fires instead when browser takes over for scrolling), so we also handle
+    // fires instead when browser takes over for scrolling), so we handle
     // selectionchange for touch/pen input to pick up native text selections.
-    const isAndroid = osPlatform === 'android' && appService?.isAndroidApp;
     const isTouchInput = lastPointerType.current === 'touch' || lastPointerType.current === 'pen';
-    if (!isAndroid && !isTouchInput) return;
+    if (!isTouchInput) return;
 
     const sel = doc.getSelection() as Selection;
     if (isValidSelection(sel)) {
