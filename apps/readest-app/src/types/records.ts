@@ -6,8 +6,8 @@ export interface DBBook {
   title: string;
   source_title?: string;
   author: string;
-  group_id?: string;
-  group_name?: string;
+  group_id?: string | null;
+  group_name?: string | null;
   tags?: string[];
   progress?: [number, number];
   reading_status?: string;

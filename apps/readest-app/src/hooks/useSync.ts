@@ -185,7 +185,20 @@ export function useSync(bookKey?: string) {
     async (books?: Book[], op: SyncOp = 'both', since?: number) => {
       if (!lastSyncedAtInited) return;
       if ((op === 'push' || op === 'both') && books?.length) {
-        await pushChanges({ books });
+        // Defensive: replace undefined nullable fields with null so JSON
+        // serialization preserves cleared values. Without this, JSON.stringify
+        // drops undefined keys, PostgREST's UPSERT keeps the old server-side
+        // values (e.g. cleared groupId/groupName silently revert), and the
+        // next pull brings the stale values back — making "Remove From Group"
+        // appear to fail. The server-side transformBookToDB also normalizes
+        // these fields, but doing it here protects against deployments that
+        // run an older server build.
+        const booksForPush = books.map((b) => ({
+          ...b,
+          groupId: b.groupId ?? null,
+          groupName: b.groupName ?? null,
+        })) as unknown as Book[];
+        await pushChanges({ books: booksForPush });
       }
       if (op === 'pull' || op === 'both') {
         return await pullChanges(

@@ -125,8 +125,14 @@ export function transformBookToDB(book, userId) {
     format: book.format,
     title: book.title || '',
     author: book.author || '',
-    group_id: book.groupId,
-    group_name: book.groupName,
+    // Use `?? null` so cleared fields are propagated to the server. Without
+    // this, JSON.stringify would drop undefined values from the upsert
+    // payload — and PostgREST's "ON CONFLICT DO UPDATE" only updates
+    // columns present in the INSERT list, so the server-side group_id /
+    // group_name would silently retain their old values. The next pull
+    // would then bring those stale values back, undoing "Remove From Group".
+    group_id: book.groupId ?? null,
+    group_name: book.groupName ?? null,
     tags: book.tags,
     progress: book.progress,
     reading_status: book.readingStatus,

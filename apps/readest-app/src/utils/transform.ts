@@ -96,8 +96,14 @@ export const transformBookToDB = (book: unknown, userId: string): DBBook => {
     format,
     title: sanitizeString(title)!,
     author: sanitizeString(author)!,
-    group_id: groupId,
-    group_name: sanitizeString(groupName),
+    // Use `?? null` so cleared fields are propagated to the server. Without
+    // this, JSON.stringify would drop undefined values from the upsert
+    // payload — and PostgREST's "ON CONFLICT DO UPDATE" only updates
+    // columns present in the INSERT list, so the server-side group_id /
+    // group_name would silently retain their old values. The next pull
+    // would then bring those stale values back, undoing "Remove From Group".
+    group_id: groupId ?? null,
+    group_name: sanitizeString(groupName) ?? null,
     tags: tags,
     progress: progress,
     reading_status: readingStatus,
@@ -136,8 +142,12 @@ export const transformBookFromDB = (dbBook: DBBook): Book => {
     format: format as BookFormat,
     title,
     author,
-    groupId: group_id,
-    groupName: group_name,
+    // Normalize null back to undefined so internal Book objects stay
+    // consistent with the type (groupId / groupName are `string | undefined`).
+    // The DB schema allows null because we explicitly write null on clear
+    // (see transformBookToDB) so PostgREST UPSERT actually wipes the column.
+    groupId: group_id ?? undefined,
+    groupName: group_name ?? undefined,
     tags: tags,
     progress: progress,
     readingStatus: reading_status as ReadingStatus,

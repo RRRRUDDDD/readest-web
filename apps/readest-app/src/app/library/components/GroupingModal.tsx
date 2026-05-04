@@ -64,11 +64,20 @@ const GroupingModal: React.FC<GroupingModalProps> = ({
       ? [newGroup, ...currentGroups]
       : currentGroups;
 
-  const isSelectedBooksHasGroup =
-    selectedBooks.some((hash) => !isMd5(hash)) ||
-    selectedBooks
-      .map((hash) => libraryBooks.find((book) => book.hash === hash)?.groupId)
-      .some((group) => group && group !== BOOK_UNGROUPED_NAME);
+  const isSelectedBooksHasGroup = selectedBooks.some((id) => {
+    // Direct book selection: check the book's own groupId
+    const book = libraryBooks.find((b) => b.hash === id);
+    if (book) {
+      return !!book.groupId && book.groupId !== BOOK_UNGROUPED_ID;
+    }
+    // Otherwise treat the id as a group id and check it's a real
+    // (non-ungrouped) group. Without this, selecting only an aggregated
+    // parent group at the bookshelf root would leave the "Remove From
+    // Group" button disabled because none of `selectedBooks` is a book
+    // hash with a groupId.
+    const groupName = getGroupName(id);
+    return !!groupName && groupName !== BOOK_UNGROUPED_NAME;
+  });
 
   const canRenameGroup = selectedBooks.length === 1 && selectedBooks.every((id) => !isMd5(id));
   const currentGroupForRename = canRenameGroup
