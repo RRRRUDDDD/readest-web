@@ -11,7 +11,7 @@ jobs:
   build_web_app:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
         with:
           submodules: 'true'
 
@@ -25,7 +25,7 @@ jobs:
           cache: pnpm
 
       - name: cache Next.js build
-        uses: actions/cache@v5
+        uses: actions/cache@v6
         with:
           path: apps/readest-app/.next/cache
           key: nextjs-web-${{ github.sha }}-${{ hashFiles('pnpm-lock.yaml') }}
